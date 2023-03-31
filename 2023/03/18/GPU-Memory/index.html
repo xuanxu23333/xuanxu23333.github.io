@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.4.2">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"example.com","root":"/","scheme":"Pisces","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":false,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="前面说到了使用GPU加速文件搜索，但是会占用较多的显存，如果在打游戏，或者跑深度学习的情况下，并不会进行搜索，那么显存就被白白浪费掉了。因此如何实现显存的使用率监控，并实现检测到显存占用过多自动释放搜索缓存就成为了一个问题。 CUDA方面在NVIDIA的文档中，有一个函数cudaMemGetInfo 1__host__​cudaError_t cudaMemGetInfo ( size_t* fr">
+<meta property="og:type" content="article">
+<meta property="og:title" content="对显存占用的监控（Windows系统）">
+<meta property="og:url" content="http://example.com/2023/03/18/GPU-Memory/index.html">
+<meta property="og:site_name" content="Hexo">
+<meta property="og:description" content="前面说到了使用GPU加速文件搜索，但是会占用较多的显存，如果在打游戏，或者跑深度学习的情况下，并不会进行搜索，那么显存就被白白浪费掉了。因此如何实现显存的使用率监控，并实现检测到显存占用过多自动释放搜索缓存就成为了一个问题。 CUDA方面在NVIDIA的文档中，有一个函数cudaMemGetInfo 1__host__​cudaError_t cudaMemGetInfo ( size_t* fr">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://i.imgtg.com/2023/03/18/l27CC.jpg">
+<meta property="og:image" content="https://i.imgtg.com/2023/03/18/l2enL.jpg">
+<meta property="og:image" content="https://i.imgtg.com/2023/03/18/l2t1q.jpg">
+<meta property="og:image" content="https://i.imgtg.com/2023/03/18/l2vpx.jpg">
+<meta property="article:published_time" content="2023-03-17T19:41:00.000Z">
+<meta property="article:modified_time" content="2023-03-18T04:47:30.000Z">
+<meta property="article:author" content="xuanxu">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://i.imgtg.com/2023/03/18/l27CC.jpg">
+
+<link rel="canonical" href="http://example.com/2023/03/18/GPU-Memory/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh-CN'
+  };
+</script>
+
+  <title>对显存占用的监控（Windows系统） | Hexo</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="切换导航栏">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">Hexo</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>首页</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>归档</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2023/03/18/GPU-Memory/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="https://i.imgtg.com/2023/03/22/9GMCK.jpg">
+      <meta itemprop="name" content="xuanxu">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Hexo">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          对显存占用的监控（Windows系统）
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">发表于</span>
+              
+
+              <time title="创建时间：2023-03-18 03:41:00 / 修改时间：12:47:30" itemprop="dateCreated datePublished" datetime="2023-03-18T03:41:00+08:00">2023-03-18</time>
+            </span>
+
+          
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <p>前面说到了使用GPU加速文件搜索，但是会占用较多的显存，如果在打游戏，或者跑深度学习的情况下，并不会进行搜索，那么显存就被白白浪费掉了。因此如何实现显存的使用率监控，并实现检测到显存占用过多自动释放搜索缓存就成为了一个问题。</p>
+<h3 id="CUDA方面"><a href="#CUDA方面" class="headerlink" title="CUDA方面"></a>CUDA方面</h3><p>在NVIDIA的文档中，有一个函数cudaMemGetInfo</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">__host__​<span class="function">cudaError_t <span class="title">cudaMemGetInfo</span> <span class="params">( <span class="type">size_t</span>* free, <span class="type">size_t</span>* total )</span></span></span><br></pre></td></tr></table></figure>
+
+<p>该方法可以直接获取GPU的空闲内存以及总内存。</p>
+<p>但是经过实测，返回结果并不准确。因此并没有使用该方法。</p>
+<h3 id="OpenCL方面"><a href="#OpenCL方面" class="headerlink" title="OpenCL方面"></a>OpenCL方面</h3><p>在OpenCL中没有可以获取GPU占用的函数，但是由于OpenCL可以通过cl_device::getInfo获取显卡的各项参数，因此可以通过OpenCL提供的拓展参数来获取。</p>
+<p>比如AMD显卡的OpenCL扩展中就有一项</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">define</span> CL_DEVICE_GLOBAL_FREE_MEMORY_AMD                0x4039</span></span><br><span class="line"></span><br><span class="line"><span class="comment">// 通过该方法即可获取AMD显卡的显存占用</span></span><br><span class="line">cl_device::getInfo&lt;CL_DEVICE_GLOBAL_FREE_MEMORY_AMD&gt;();</span><br></pre></td></tr></table></figure>
+
+<p>AMD所有的OpenCL扩展在这里</p>
+<p><a target="_blank" rel="noopener" href="https://registry.khronos.org/OpenCL/extensions/amd/cl_amd_device_attribute_query.txt">https://registry.khronos.org/OpenCL/extensions/amd/cl_amd_device_attribute_query.txt</a></p>
+<p>不过这样也有一些问题，比如适配困难。现在Intel也推出了自家的独立显卡Arc系列，不同显卡的适配就成为了一个问题。因此该方法也没有采用。</p>
+<h3 id="Windows任务管理器"><a href="#Windows任务管理器" class="headerlink" title="Windows任务管理器"></a>Windows任务管理器</h3><p>其实在Windows任务管理器中就可以看到显存的占用，因此如何获取这个数值就成为了问题的关键。</p>
+<p><img src="https://i.imgtg.com/2023/03/18/l27CC.jpg" alt="l27CC.jpg"></p>
+<p>在Windows的powershell中有这样的API</p>
+<p><a target="_blank" rel="noopener" href="https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.diagnostics/get-counter?view=powershell-7.3">Get-Counter (Microsoft.PowerShell.Diagnostics) - PowerShell | Microsoft Learn</a></p>
+<p>通过Get-Counter可以实现获取系统中的各项参数。比如我们这里需要获取GPU相关的信息</p>
+<p><img src="https://i.imgtg.com/2023/03/18/l2enL.jpg" alt="l2enL.jpg"></p>
+<p>在Stack Overflow也找到了相同的解决方案</p>
+<p><a target="_blank" rel="noopener" href="https://stackoverflow.com/questions/73476947/how-to-get-the-dedicated-gpu-memory-number-for-every-running-process-in-window">c++ - How to get the “Dedicated GPU memory” number for every running process in Windows (The same numbers that are shown in the Windows Task Manager) - Stack Overflow</a></p>
+<p>由于powershell调用的效率太低，因此我们需要直接使用对应的Windows API，而不是重复调用powershell脚本。</p>
+<p>也就是Windows API中的PDH函数</p>
+<h3 id="PDH函数"><a href="#PDH函数" class="headerlink" title="PDH函数"></a>PDH函数</h3><p><a target="_blank" rel="noopener" href="https://learn.microsoft.com/en-us/windows/win32/perfctrs/using-the-pdh-functions-to-consume-counter-data">Using the PDH Functions to Consume Counter Data - Win32 apps | Microsoft Learn</a></p>
+<p>通过PdhOpenQuery函数打开一个查询，然后使用PdhAddCounter设置要查询的信息，最后使用PdhCollectQueryData获取信息，再使用PdhGetRawCounterArray进行转换，即可获取我们想要的显存占用。</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br></pre></td><td class="code"><pre><span class="line"><span class="function">std::unordered_map&lt;std::wstring, LONGLONG&gt; <span class="title">query_pdh_val</span><span class="params">(PDH_STATUS&amp; ret)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    PDH_HQUERY query;</span><br><span class="line">    std::unordered_map&lt;std::wstring, LONGLONG&gt; memory_usage_map;</span><br><span class="line">    ret = <span class="built_in">PdhOpenQuery</span>(<span class="literal">nullptr</span>, <span class="literal">NULL</span>, &amp;query);</span><br><span class="line">    <span class="keyword">if</span> (ret != ERROR_SUCCESS)</span><br><span class="line">    &#123;</span><br><span class="line">        <span class="keyword">return</span> memory_usage_map;</span><br><span class="line">    &#125;</span><br><span class="line">    PDH_HCOUNTER counter;</span><br><span class="line">    ret = <span class="built_in">PdhAddCounter</span>(query, <span class="string">L&quot;\\GPU Adapter Memory(*)\\Dedicated Usage&quot;</span>, <span class="literal">NULL</span>, &amp;counter);</span><br><span class="line">    <span class="keyword">if</span> (ret != ERROR_SUCCESS)</span><br><span class="line">    &#123;</span><br><span class="line">        <span class="keyword">return</span> memory_usage_map;</span><br><span class="line">    &#125;</span><br><span class="line">    ret = <span class="built_in">PdhCollectQueryData</span>(query);</span><br><span class="line">    <span class="keyword">if</span> (ret != ERROR_SUCCESS)</span><br><span class="line">    &#123;</span><br><span class="line">        <span class="keyword">return</span> memory_usage_map;</span><br><span class="line">    &#125;</span><br><span class="line">    DWORD bufferSize = <span class="number">0</span>;</span><br><span class="line">    DWORD itemCount = <span class="number">0</span>;</span><br><span class="line">    <span class="built_in">PdhGetRawCounterArray</span>(counter, &amp;bufferSize, &amp;itemCount, <span class="literal">nullptr</span>);</span><br><span class="line">    <span class="keyword">auto</span>&amp;&amp; lpItemBuffer = <span class="built_in">reinterpret_cast</span>&lt;PPDH_RAW_COUNTER_ITEM_W&gt;(<span class="keyword">new</span> <span class="type">char</span>[bufferSize]);</span><br><span class="line">    ret = <span class="built_in">PdhGetRawCounterArray</span>(counter, &amp;bufferSize, &amp;itemCount, lpItemBuffer);</span><br><span class="line">    <span class="keyword">if</span> (ret != ERROR_SUCCESS)</span><br><span class="line">    &#123;</span><br><span class="line">        <span class="keyword">delete</span>[] lpItemBuffer;</span><br><span class="line">        <span class="keyword">return</span> memory_usage_map;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">for</span> (DWORD i = <span class="number">0</span>; i &lt; itemCount; ++i)</span><br><span class="line">    &#123;</span><br><span class="line">        <span class="keyword">auto</span>&amp; [szName, RawValue] = lpItemBuffer[i];</span><br><span class="line">        memory_usage_map.<span class="built_in">insert</span>(std::<span class="built_in">make_pair</span>(szName, RawValue.FirstValue));</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">delete</span>[] lpItemBuffer;</span><br><span class="line">    ret = <span class="built_in">PdhCloseQuery</span>(query);</span><br><span class="line">    <span class="keyword">return</span> memory_usage_map;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这里的query_pdh_val()方法返回的是GPU的luid和显存占用的map。</p>
+<p>和powershell返回的结果是相同的</p>
+<p><img src="https://i.imgtg.com/2023/03/18/l2t1q.jpg" alt="l2t1q.jpg"></p>
+<p>但是这里又出现了一个大问题，这些luid开头的东西是什么，和显卡是怎么进行对应的。</p>
+<p>我们平时看到的显卡名都是像NVIDIA GeForce RTX 2060，AMD Radeon RX 5700XT这样</p>
+<p><img src="https://i.imgtg.com/2023/03/18/l2vpx.jpg" alt="l2vpx.jpg"></p>
+<p>powershell中返回的gpu adapter memory(luid_0x00000000_0xXXXXXXXX)到底是如何和显卡一一对应的仍然不清楚。</p>
+<h3 id="GPU名称和luid的对应查询方案"><a href="#GPU名称和luid的对应查询方案" class="headerlink" title="GPU名称和luid的对应查询方案"></a>GPU名称和luid的对应查询方案</h3><p>在网上找了非常多的资料，都没有找到。最后是在翻看Windows DirectX API中偶然发现了在DXGI_ADAPTER_DESC结构体中有一个字段，名字就叫AdapterLuid</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">typedef</span> <span class="keyword">struct</span> <span class="title class_">DXGI_ADAPTER_DESC</span> &#123;</span><br><span class="line">  WCHAR  Description[<span class="number">128</span>];</span><br><span class="line">  UINT   VendorId;</span><br><span class="line">  UINT   DeviceId;</span><br><span class="line">  UINT   SubSysId;</span><br><span class="line">  UINT   Revision;</span><br><span class="line">  SIZE_T DedicatedVideoMemory;</span><br><span class="line">  SIZE_T DedicatedSystemMemory;</span><br><span class="line">  SIZE_T SharedSystemMemory;</span><br><span class="line">  LUID   AdapterLuid;</span><br><span class="line">&#125; DXGI_ADAPTER_DESC;</span><br></pre></td></tr></table></figure>
+
+<p>因此，只需要通过DirectX API将显卡和luid对应起来，再和前面的PDH函数查询出的信息进行对应，即可实现显卡和显存占用信息的对应。</p>
+<p>具体的方法为如下：</p>
+<p>创建DXGIFactory，这里由于是jni调用的，所以我抛出了一个Java的异常。</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> (<span class="built_in">CreateDXGIFactory</span>(__uuidof(IDXGIFactory), <span class="built_in">reinterpret_cast</span>&lt;<span class="type">void</span>**&gt;(&amp;p_dxgi_factory)) != S_OK)</span><br><span class="line">&#123;</span><br><span class="line">    env-&gt;<span class="built_in">ThrowNew</span>(env-&gt;<span class="built_in">FindClass</span>(<span class="string">&quot;java/lang/Exception&quot;</span>), <span class="string">&quot;Create dxgi factory failed.&quot;</span>);</span><br><span class="line">    <span class="keyword">return</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>然后使用DXGIFactory遍历所有GPU，即可获取GPU名称和luid的对应关系</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">for</span> (UINT i = <span class="number">0</span>;</span><br><span class="line">    p_dxgi_factory-&gt;<span class="built_in">EnumAdapters</span>(i, &amp;p_adapter) != DXGI_ERROR_NOT_FOUND;</span><br><span class="line">    ++i)</span><br><span class="line">&#123;</span><br><span class="line">    DXGI_ADAPTER_DESC adapter_desc;</span><br><span class="line">    p_adapter-&gt;<span class="built_in">GetDesc</span>(&amp;adapter_desc);</span><br><span class="line">    gpu_name_adapter_map.<span class="built_in">insert</span>(std::<span class="built_in">make_pair</span>(adapter_desc.Description, adapter_desc));</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>将对应关系保存至gpu_name_adapter_map中。</p>
+<p>Luid有两个成员，一个是LowPart，一个是HighPart</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">typedef</span> <span class="keyword">struct</span> <span class="title class_">_LUID</span> &#123;</span><br><span class="line">    DWORD LowPart;</span><br><span class="line">    LONG HighPart;</span><br><span class="line">&#125; LUID, *PLUID;</span><br></pre></td></tr></table></figure>
+
+<p>在Windows系统中是高位在前，低位在后，因此通过下面的方法即可获取luid，n2hexstr()方法是数字转16进制字符串。</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">template</span> &lt;<span class="keyword">typename</span> I&gt;</span><br><span class="line"><span class="function">std::string <span class="title">n2hexstr</span><span class="params">(I w, <span class="type">size_t</span> hex_len = <span class="keyword">sizeof</span>(I) &lt;&lt; <span class="number">1</span>)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="type">static</span> <span class="type">const</span> <span class="type">char</span>* digits = <span class="string">&quot;0123456789ABCDEF&quot;</span>;</span><br><span class="line">    <span class="function">std::string <span class="title">rc</span><span class="params">(hex_len, <span class="string">&#x27;0&#x27;</span>)</span></span>;</span><br><span class="line">    <span class="keyword">for</span> (<span class="type">size_t</span> i = <span class="number">0</span>, j = (hex_len - <span class="number">1</span>) * <span class="number">4</span>; i &lt; hex_len; ++i, j -= <span class="number">4</span>)</span><br><span class="line">        rc[i] = digits[w &gt;&gt; j &amp; <span class="number">0x0f</span>];</span><br><span class="line">    <span class="keyword">return</span> rc;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">auto</span>&amp;&amp; luid_str = <span class="string">&quot;0x&quot;</span> + <span class="built_in">n2hexstr</span>(adapter_luid.HighPart) + <span class="string">&quot;_&quot;</span> + <span class="string">&quot;0x&quot;</span> + <span class="built_in">n2hexstr</span>(adapter_luid.LowPart);</span><br></pre></td></tr></table></figure>
+
+<p>在我这台电脑上，例如想监控NVIDIA GeForce RTX 2060的显卡的显存占用。先通过gpu_name_adapter_map找到对应的luid，为0x00000000_0x00010fcf，然后调用query_pdh_val()函数获取所有显卡的显存占用，最后通过luid找出对应的显存占用即可。</p>
+<p>至此，对显卡显存占用的查询监控方案结束。</p>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2023/01/16/GPU/" rel="prev" title="GPU搜索加速原理">
+      <i class="fa fa-chevron-left"></i> GPU搜索加速原理
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/2023/03/30/fileMonitor/" rel="next" title="另一种文件监控的方法">
+      另一种文件监控的方法 <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          文章目录
+        </li>
+        <li class="sidebar-nav-overview">
+          站点概览
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-3"><a class="nav-link" href="#CUDA%E6%96%B9%E9%9D%A2"><span class="nav-number">1.</span> <span class="nav-text">CUDA方面</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#OpenCL%E6%96%B9%E9%9D%A2"><span class="nav-number">2.</span> <span class="nav-text">OpenCL方面</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Windows%E4%BB%BB%E5%8A%A1%E7%AE%A1%E7%90%86%E5%99%A8"><span class="nav-number">3.</span> <span class="nav-text">Windows任务管理器</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#PDH%E5%87%BD%E6%95%B0"><span class="nav-number">4.</span> <span class="nav-text">PDH函数</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#GPU%E5%90%8D%E7%A7%B0%E5%92%8Cluid%E7%9A%84%E5%AF%B9%E5%BA%94%E6%9F%A5%E8%AF%A2%E6%96%B9%E6%A1%88"><span class="nav-number">5.</span> <span class="nav-text">GPU名称和luid的对应查询方案</span></a></li></ol></div>
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="xuanxu"
+      src="https://i.imgtg.com/2023/03/22/9GMCK.jpg">
+  <p class="site-author-name" itemprop="name">xuanxu</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">9</span>
+          <span class="site-state-item-name">日志</span>
+        </a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2023</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">xuanxu</span>
+</div>
+  <div class="powered-by">由 <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://pisces.theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Pisces</a> 强力驱动
+  </div>
+
+        
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+</body>
+</html>

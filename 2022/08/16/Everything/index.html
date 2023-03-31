@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.4.2">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"example.com","root":"/","scheme":"Pisces","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":false,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="网上找了很多的资料，还是没有很清楚的了解Everything这款软件。所以自己研究了一下，并记录下来。         Everything是一个搜索文件速度超快的软件，相比Windows自带的搜索功能，Everything可以做到在数十万文件中做到秒搜。     本文来分析一下Everything背后的原理以及自己实现一个Everything。 Everything的工作原理">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Everything高速搜索文件原理及实现">
+<meta property="og:url" content="http://example.com/2022/08/16/Everything/index.html">
+<meta property="og:site_name" content="Hexo">
+<meta property="og:description" content="网上找了很多的资料，还是没有很清楚的了解Everything这款软件。所以自己研究了一下，并记录下来。         Everything是一个搜索文件速度超快的软件，相比Windows自带的搜索功能，Everything可以做到在数十万文件中做到秒搜。     本文来分析一下Everything背后的原理以及自己实现一个Everything。 Everything的工作原理">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://i.328888.xyz/2023/03/30/i0KMjz.jpeg">
+<meta property="article:published_time" content="2022-08-15T20:57:10.000Z">
+<meta property="article:modified_time" content="2023-03-30T06:35:26.000Z">
+<meta property="article:author" content="xuanxu">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://i.328888.xyz/2023/03/30/i0KMjz.jpeg">
+
+<link rel="canonical" href="http://example.com/2022/08/16/Everything/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh-CN'
+  };
+</script>
+
+  <title>Everything高速搜索文件原理及实现 | Hexo</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="切换导航栏">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">Hexo</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>首页</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>归档</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2022/08/16/Everything/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="https://i.imgtg.com/2023/03/22/9GMCK.jpg">
+      <meta itemprop="name" content="xuanxu">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Hexo">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          Everything高速搜索文件原理及实现
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">发表于</span>
+
+              <time title="创建时间：2022-08-16 04:57:10" itemprop="dateCreated datePublished" datetime="2022-08-16T04:57:10+08:00">2022-08-16</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">更新于</span>
+                <time title="修改时间：2023-03-30 14:35:26" itemprop="dateModified" datetime="2023-03-30T14:35:26+08:00">2023-03-30</time>
+              </span>
+
+          
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <p>        网上找了很多的资料，还是没有很清楚的了解Everything这款软件。所以自己研究了一下，并记录下来。</p>
+<p>        Everything是一个搜索文件速度超快的软件，相比Windows自带的搜索功能，Everything可以做到在数十万文件中做到秒搜。</p>
+<p>    本文来分析一下Everything背后的原理以及自己实现一个Everything。</p>
+<h2 id="Everything的工作原理"><a href="#Everything的工作原理" class="headerlink" title="Everything的工作原理"></a>Everything的工作原理</h2><p>    Everything在第一次打开程序时会扫描整个磁盘，并建立一个索引库。需要注意的是，Everything并不是像Windows文件夹遍历那样一个文件一个文件的搜索并记录。而是通过NTFS文件系统的特性，MFT和USN journal。这也是Everything仅支持NTFS文件系统的原因。</p>
+<p>    <strong>Master File Table (MTF)</strong></p>
+<p>    在NTFS文件系统中，有一个特殊的表，称为MTF表。所有文件夹和文件的名称都被存储在该表中，Everything通过遍历这个表的所有内容，实现在不遍历文件系统就能获取当前磁盘中的所有文件的名称和路径。</p>
+<p>    <strong>USN journal</strong></p>
+<p>    NTFS的日志功能。所有对文件系统的修改操作都被记录在了一个journal日志文件中。Everything通过监控这个日志文件实现对文件修改的监控。</p>
+<p>    <strong>文件查找</strong></p>
+<p>    通过字符串匹配算法从之前建立的索引中对字符串进行匹配，并显示文件名称和路径。</p>
+<p>关于usn日志的相关信息，个人认为这篇文章写的比较清楚</p>
+<p><a target="_blank" rel="noopener" href="http://atr.pub/2016/04/16/NTFS-USN/">NTFS USN日志记录读取历险记 - Irix的博客 | Irix’s Blog (atr.pub)</a></p>
+<p>以及官方文档</p>
+<p><a target="_blank" rel="noopener" href="https://learn.microsoft.com/en-us/windows/win32/fileio/change-journals">Change Journals - Win32 apps | Microsoft Learn</a></p>
+<p><a target="_blank" rel="noopener" href="https://learn.microsoft.com/en-us/previous-versions/windows/it-pro/windows-2000-server/bb742450(v=technet.10)">Keeping an Eye on Your NTFS Drives: the Windows 2000 Change Journal Explained | Microsoft Learn</a></p>
+<h2 id="自己实现一个Everything"><a href="#自己实现一个Everything" class="headerlink" title="自己实现一个Everything"></a>自己实现一个Everything</h2><p>    <strong>我自己已经实现了一个完整的类似于Everything的软件，代码已经在GitHub上开源，欢迎各位去点个star呀。</strong></p>
+<p><a target="_blank" rel="noopener" href="https://github.com/XUANXUQAQ/File-Engine">XUANXUQAQ/File-Engine: An app launcher &amp;&amp; efficiency tool (github.com)</a></p>
+<h3 id="一、建立数据库索引"><a href="#一、建立数据库索引" class="headerlink" title="一、建立数据库索引"></a>一、建立数据库索引</h3><p>    首先，我们需要做的就是对文件的路径进行索引。我这里选用SQLite。不知道Everything是使用了什么数据库才使他们的索引文件做到这么小，至于为什么这么快，推测可能是先将索引放入内存，索引可用后，程序在后台慢慢同步到硬盘的吧。</p>
+<p>    搜索的核心方法是通过创建USN日志并进行读取，然后将数据还原成文件路径并写入数据库。</p>
+<p>    <strong>1. 首先是获取驱动盘的句柄</strong></p>
+<p>    通过CreateFile方法打开磁盘，并返回磁盘句柄。</p>
+<p>    关于CreateFile的用法详见MSDN<a target="_blank" rel="noopener" href="https://docs.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-createfilew">CreateFileW function (fileapi.h) - Win32 apps | Microsoft Docs</a></p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br></pre></td><td class="code"><pre><span class="line"><span class="type">bool</span> <span class="title function_">volume::get_handle</span><span class="params">()</span></span><br><span class="line">&#123;</span><br><span class="line">    <span class="comment">// 为\\.\C:的形式</span></span><br><span class="line">    CString <span class="title function_">lp_file_name</span><span class="params">(_T(<span class="string">&quot;\\\\.\\c:&quot;</span>))</span>;</span><br><span class="line">    lp_file_name.SetAt(<span class="number">4</span>, vol);</span><br><span class="line"></span><br><span class="line"></span><br><span class="line">    hVol = CreateFile(lp_file_name,</span><br><span class="line">                      GENERIC_READ | GENERIC_WRITE, <span class="comment">// 可以为0</span></span><br><span class="line">                      FILE_SHARE_READ | FILE_SHARE_WRITE, <span class="comment">// 必须包含有FILE_SHARE_WRITE</span></span><br><span class="line">                      nullptr,</span><br><span class="line">                      OPEN_EXISTING, <span class="comment">// 必须包含OPEN_EXISTING, CREATE_ALWAYS可能会导致错误</span></span><br><span class="line">                      FILE_ATTRIBUTE_READONLY, <span class="comment">// FILE_ATTRIBUTE_NORMAL可能会导致错误</span></span><br><span class="line">                      nullptr);</span><br><span class="line"></span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (INVALID_HANDLE_VALUE != hVol)</span><br><span class="line">    &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">true</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">auto</span>&amp;&amp; info = <span class="built_in">std</span>::<span class="built_in">wstring</span>(<span class="string">L&quot;create file handle failed. &quot;</span>) + lp_file_name.GetString() +</span><br><span class="line">        <span class="string">L&quot;error code: &quot;</span> + <span class="built_in">std</span>::to_wstring(GetLastError());</span><br><span class="line">    <span class="built_in">fprintf</span>(<span class="built_in">stderr</span>, <span class="string">&quot;fileSearcherUSN: %ls&quot;</span>, info.c_str());</span><br><span class="line">    <span class="keyword">return</span> <span class="literal">false</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>    <strong>2. 之后开始创建USN日志</strong></p>
+<p>    通过DeviceIoControl方法向磁盘发送FSCTL_CREATE_USN_JOURNAL命令，创建USN日志。</p>
+<p>    关于DeviceIoControl的用法，详见MSDN<a target="_blank" rel="noopener" href="https://docs.microsoft.com/en-us/windows/win32/api/ioapiset/nf-ioapiset-deviceiocontrol">DeviceIoControl function (ioapiset.h) - Win32 apps | Microsoft Docs</a></p>
+<p>DeviceIoControl的各个命令操作，详见MSDN<a target="_blank" rel="noopener" href="https://docs.microsoft.com/en-us/windows/win32/fileio/volume-management-control-codes">Volume Management Control Codes - Win32 apps | Microsoft Docs</a></p>
+<p>这里创建USN日志使用的是FSCTL_CREATE_USN命令<a target="_blank" rel="noopener" href="https://docs.microsoft.com/en-us/windows/win32/api/winioctl/ni-winioctl-fsctl_create_usn_journal">FSCTL_CREATE_USN_JOURNAL - Win32 apps | Microsoft Docs</a></p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br></pre></td><td class="code"><pre><span class="line"><span class="type">bool</span> <span class="title function_">volume::create_usn</span><span class="params">()</span></span><br><span class="line">&#123;</span><br><span class="line">    cujd.MaximumSize = <span class="number">0</span>; <span class="comment">// 0表示使用默认值  </span></span><br><span class="line">    cujd.AllocationDelta = <span class="number">0</span>; <span class="comment">// 0表示使用默认值</span></span><br><span class="line"></span><br><span class="line">    DWORD br;</span><br><span class="line">    <span class="keyword">if</span> (</span><br><span class="line">        DeviceIoControl(hVol, <span class="comment">// handle to volume</span></span><br><span class="line">                        FSCTL_CREATE_USN_JOURNAL, <span class="comment">// dwIoControlCode</span></span><br><span class="line">                        &amp;cujd, <span class="comment">// input buffer</span></span><br><span class="line">                        <span class="keyword">sizeof</span>(cujd), <span class="comment">// size of input buffer</span></span><br><span class="line">                        nullptr, <span class="comment">// lpOutBuffer</span></span><br><span class="line">                        <span class="number">0</span>, <span class="comment">// nOutBufferSize</span></span><br><span class="line">                        &amp;br, <span class="comment">// number of bytes returned</span></span><br><span class="line">                        nullptr) <span class="comment">// OVERLAPPED structure    </span></span><br><span class="line">    )</span><br><span class="line">    &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">true</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">auto</span>&amp;&amp; info = <span class="string">&quot;create usn error. Error code: &quot;</span> + <span class="built_in">std</span>::to_string(GetLastError());</span><br><span class="line">    <span class="built_in">fprintf</span>(<span class="built_in">stderr</span>, <span class="string">&quot;fileSearcherUSN: %s\n&quot;</span>, info.c_str());</span><br><span class="line">    <span class="keyword">return</span> <span class="literal">false</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>    <strong>3. 获取USN日志信息</strong></p>
+<p>    还是通过DeviceIoControl方法发送FSCTL_QUERY_USN_JOURNAL命令，获取当前卷USN日志的各项信息，检查USN日志是否获取成功。</p>
+<p><a target="_blank" rel="noopener" href="https://docs.microsoft.com/en-us/windows/win32/api/winioctl/ni-winioctl-fsctl_query_usn_journal">FSCTL_QUERY_USN_JOURNAL - Win32 apps | Microsoft Docs</a></p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br></pre></td><td class="code"><pre><span class="line"><span class="type">bool</span> <span class="title function_">volume::get_usn_info</span><span class="params">()</span></span><br><span class="line">&#123;</span><br><span class="line">    DWORD br;</span><br><span class="line">    <span class="keyword">if</span> (</span><br><span class="line">        DeviceIoControl(hVol, <span class="comment">// handle to volume</span></span><br><span class="line">                        FSCTL_QUERY_USN_JOURNAL, <span class="comment">// dwIoControlCode</span></span><br><span class="line">                        nullptr, <span class="comment">// lpInBuffer</span></span><br><span class="line">                        <span class="number">0</span>, <span class="comment">// nInBufferSize</span></span><br><span class="line">                        &amp;ujd, <span class="comment">// output buffer</span></span><br><span class="line">                        <span class="keyword">sizeof</span>(ujd), <span class="comment">// size of output buffer</span></span><br><span class="line">                        &amp;br, <span class="comment">// number of bytes returned</span></span><br><span class="line">                        nullptr) <span class="comment">// OVERLAPPED structure</span></span><br><span class="line">    )</span><br><span class="line">    &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">true</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">auto</span>&amp;&amp; info = <span class="string">&quot;query usn error. Error code: &quot;</span> + <span class="built_in">std</span>::to_string(GetLastError());</span><br><span class="line">    <span class="built_in">fprintf</span>(<span class="built_in">stderr</span>, <span class="string">&quot;fileSearcherUSN: %s\n&quot;</span>, info.c_str());</span><br><span class="line">    <span class="keyword">return</span> <span class="literal">false</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>    <strong>4. 获取 USN Journal 文件的基本信息</strong></p>
+<p>    仍然通过DeviceIoControl发送FSCTL_ENUM_USN_DATA遍历USN日志。</p>
+<p>    <a target="_blank" rel="noopener" href="https://docs.microsoft.com/en-us/windows/win32/api/winioctl/ni-winioctl-fsctl_enum_usn_data">FSCTL_ENUM_USN_DATA - Win32 apps | Microsoft Docs</a></p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br></pre></td><td class="code"><pre><span class="line"><span class="type">bool</span> <span class="title function_">volume::get_usn_journal</span><span class="params">()</span></span><br><span class="line">&#123;</span><br><span class="line">    MFT_ENUM_DATA med;</span><br><span class="line">    med.StartFileReferenceNumber = <span class="number">0</span>;</span><br><span class="line">    med.LowUsn = ujd.FirstUsn;</span><br><span class="line">    med.HighUsn = ujd.NextUsn;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 根目录</span></span><br><span class="line">    CString <span class="title function_">tmp</span><span class="params">(_T(<span class="string">&quot;C:&quot;</span>))</span>;</span><br><span class="line">    tmp.SetAt(<span class="number">0</span>, vol);</span><br><span class="line"></span><br><span class="line">    constexpr <span class="keyword">auto</span> BUF_LEN = <span class="keyword">sizeof</span>(USN) + <span class="number">0x100000</span>; <span class="comment">// 尽可能地大，提高效率;</span></span><br><span class="line"></span><br><span class="line">    CHAR* buffer = new CHAR[BUF_LEN];</span><br><span class="line">    DWORD usn_data_size;</span><br><span class="line">    pfrn_name pfrn_name;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">while</span> (<span class="number">0</span> != DeviceIoControl(hVol,</span><br><span class="line">                                FSCTL_ENUM_USN_DATA,</span><br><span class="line">                                &amp;med,</span><br><span class="line">                                <span class="keyword">sizeof</span> med,</span><br><span class="line">                                buffer,</span><br><span class="line">                                BUF_LEN,</span><br><span class="line">                                &amp;usn_data_size,</span><br><span class="line">                                nullptr))</span><br><span class="line">    &#123;</span><br><span class="line">        DWORD dw_ret_bytes = usn_data_size - <span class="keyword">sizeof</span>(USN);</span><br><span class="line">        <span class="comment">// 找到第一个 USN 记录  </span></span><br><span class="line">        <span class="keyword">auto</span> usn_record = reinterpret_cast&lt;PUSN_RECORD&gt;(buffer + <span class="keyword">sizeof</span>(USN));</span><br><span class="line"></span><br><span class="line">        <span class="keyword">while</span> (dw_ret_bytes &gt; <span class="number">0</span>)</span><br><span class="line">        &#123;</span><br><span class="line">            <span class="comment">// 获取到的信息      </span></span><br><span class="line">            <span class="type">const</span> CString <span class="title function_">cfile_name</span><span class="params">(usn_record-&gt;FileName, usn_record-&gt;FileNameLength / <span class="number">2</span>)</span>;</span><br><span class="line">            pfrn_name.filename = cfile_name;</span><br><span class="line">            pfrn_name.pfrn = usn_record-&gt;ParentFileReferenceNumber;</span><br><span class="line">            <span class="comment">// frnPfrnNameMap[UsnRecord-&gt;FileReferenceNumber] = pfrnName;</span></span><br><span class="line">            frnPfrnNameMap.insert(<span class="built_in">std</span>::<span class="built_in">make_pair</span>(usn_record-&gt;FileReferenceNumber, pfrn_name));</span><br><span class="line">            <span class="comment">// 获取下一个记录  </span></span><br><span class="line">            <span class="type">const</span> <span class="keyword">auto</span> record_len = usn_record-&gt;RecordLength;</span><br><span class="line">            dw_ret_bytes -= record_len;</span><br><span class="line">            usn_record = reinterpret_cast&lt;PUSN_RECORD&gt;(reinterpret_cast&lt;PCHAR&gt;(usn_record) + record_len);</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="comment">// 获取下一页数据 </span></span><br><span class="line">        med.StartFileReferenceNumber = *reinterpret_cast&lt;DWORDLONG*&gt;(buffer);</span><br><span class="line">    &#125;</span><br><span class="line">    delete[] buffer;</span><br><span class="line">    <span class="keyword">return</span> <span class="literal">true</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>    这里我将获取到的信息放入了frnPfrnNameMap中</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">typedef</span> <span class="class"><span class="keyword">struct</span> _<span class="title">pfrn_name</span></span></span><br><span class="line"><span class="class">&#123;</span></span><br><span class="line">    DWORDLONG pfrn = <span class="number">0</span>;</span><br><span class="line">    CString filename;</span><br><span class="line">&#125; pfrn_name;</span><br><span class="line"></span><br><span class="line"><span class="keyword">typedef</span> <span class="built_in">unordered_map</span>&lt;DWORDLONG, pfrn_name&gt; Frn_Pfrn_Name_Map;</span><br></pre></td></tr></table></figure>
+
+<p>    这里不得不说USN日志文件的数据结构。</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">typedef</span> <span class="class"><span class="keyword">struct</span> &#123;</span></span><br><span class="line">    DWORD RecordLength;</span><br><span class="line">    WORD   MajorVersion;</span><br><span class="line">    WORD   MinorVersion;</span><br><span class="line">    DWORDLONG FileReferenceNumber;</span><br><span class="line">    DWORDLONG ParentFileReferenceNumber;</span><br><span class="line">    USN Usn;</span><br><span class="line">    LARGE_INTEGER TimeStamp;</span><br><span class="line">    DWORD Reason;</span><br><span class="line">    DWORD SourceInfo;</span><br><span class="line">    DWORD SecurityId;</span><br><span class="line">    DWORD FileAttributes;</span><br><span class="line">    WORD   FileNameLength;</span><br><span class="line">    WORD   FileNameOffset;</span><br><span class="line">    WCHAR FileName[<span class="number">1</span>];</span><br><span class="line">&#125; USN_RECORD_V2, *PUSN_RECORD_V2;</span><br></pre></td></tr></table></figure>
+
+<p>    这里我们需要用到FileReferenceNumber、ParentFileReferenceNumber、FileName。</p>
+<p>    USN日志在Windows中也有对应的命令，使用fsutil就可以创建日志</p>
+<figure class="highlight powershell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">fsutil usn createJournal C:</span><br><span class="line">fsutil usn enumData <span class="number">1</span> <span class="number">0</span> <span class="number">1</span> C:</span><br></pre></td></tr></table></figure>
+
+<p>    此时，可以看到USN日志的数据。</p>
+<p><img src="https://i.328888.xyz/2023/03/30/i0KMjz.jpeg" alt="i0KMjz.jpeg"></p>
+<p>    包含文件参照号，父文件参照号，以及文件名。</p>
+<p>    也就是上文提到的FileReferenceNumber、ParentFileReferenceNumber、FileName</p>
+<p>    USN日志是一个树状结构，通过文件号和父文件号不断向上找，最终可以拼接出一个完整的路径。获得路径后即可存入数据库。</p>
+<p>    最后删除USN日志。</p>
+<figure class="highlight powershell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">fsutil usn deleteJournal /D C:</span><br></pre></td></tr></table></figure>
+
+<p>    <strong>5. 删除USN日志文件</strong></p>
+<p>    因为USN日志默认并不存在，所以在程序创建之后可以将它删除。</p>
+<p>    仍然是通过DeviceIoControl方法发送命令。</p>
+<p>    <a target="_blank" rel="noopener" href="https://docs.microsoft.com/en-us/windows/win32/api/winioctl/ni-winioctl-fsctl_delete_usn_journal">FSCTL_DELETE_USN_JOURNAL - Win32 apps | Microsoft Docs</a></p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br></pre></td><td class="code"><pre><span class="line"><span class="type">bool</span> <span class="title function_">volume::delete_usn</span><span class="params">()</span> <span class="type">const</span></span><br><span class="line">&#123;</span><br><span class="line">    DELETE_USN_JOURNAL_DATA dujd;</span><br><span class="line">    dujd.UsnJournalID = ujd.UsnJournalID;</span><br><span class="line">    dujd.DeleteFlags = USN_DELETE_FLAG_DELETE;</span><br><span class="line">    DWORD br;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (DeviceIoControl(hVol,</span><br><span class="line">                        FSCTL_DELETE_USN_JOURNAL,</span><br><span class="line">                        &amp;dujd,</span><br><span class="line">                        <span class="keyword">sizeof</span>(dujd),</span><br><span class="line">                        nullptr,</span><br><span class="line">                        <span class="number">0</span>,</span><br><span class="line">                        &amp;br,</span><br><span class="line">                        nullptr)</span><br><span class="line">    )</span><br><span class="line">    &#123;</span><br><span class="line">        CloseHandle(hVol);</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">true</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    CloseHandle(hVol);</span><br><span class="line">    <span class="keyword">return</span> <span class="literal">false</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>    <strong>6. 此时就可以通过遍历frnPfrnNameMap还原出每个文件的路径，并存入数据库</strong></p>
+<p>    通过不断向上遍历查找，最后拼接出文件的路径。</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line"><span class="type">void</span> <span class="title function_">volume::get_path</span><span class="params">(DWORDLONG frn, CString&amp; output_path)</span></span><br><span class="line">&#123;</span><br><span class="line">    <span class="type">const</span> <span class="keyword">auto</span> end = frnPfrnNameMap.end();</span><br><span class="line">    <span class="keyword">while</span> (<span class="literal">true</span>)</span><br><span class="line">    &#123;</span><br><span class="line">        <span class="keyword">auto</span> it = frnPfrnNameMap.find(frn);</span><br><span class="line">        <span class="keyword">if</span> (it == end)</span><br><span class="line">        &#123;</span><br><span class="line">            output_path = <span class="string">L&quot;:&quot;</span> + output_path;</span><br><span class="line">            <span class="keyword">return</span>;</span><br><span class="line">        &#125;</span><br><span class="line">        output_path = _T(<span class="string">&quot;\\&quot;</span>) + it-&gt;second.filename + output_path;</span><br><span class="line">        frn = it-&gt;second.pfrn;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h2 id="此时，我们已经实现了实现Everything的第一步，建立数据库索引。"><a href="#此时，我们已经实现了实现Everything的第一步，建立数据库索引。" class="headerlink" title="此时，我们已经实现了实现Everything的第一步，建立数据库索引。"></a>此时，我们已经实现了实现Everything的第一步，建立数据库索引。</h2><h3 id="二、监控文件的变化"><a href="#二、监控文件的变化" class="headerlink" title="二、监控文件的变化"></a>二、监控文件的变化</h3><p>监控文件的变化在这里我采用的是ReadDirectoryChangesW方法进行监控。<a target="_blank" rel="noopener" href="https://docs.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-readdirectorychangesw">ReadDirectoryChangesW function (winbase.h) - Win32 apps | Microsoft Docs</a></p>
+<p>文件操作类型有四种，分别为 创建、更改、删除、重命名</p>
+<p>对应到Windows API里是FILE_ACTION_ADDED、FILE_ACTION_MODIFIED、FILE_ACTION_REMOVED、FILE_ACTION_RENAMED_OLD_NAME。</p>
+<p>通过监控这四个操作，我们可以实现监控文件的变化，并更新数据库索引。</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/**</span></span><br><span class="line"><span class="comment"> * 开始监控文件夹</span></span><br><span class="line"><span class="comment"> */</span></span><br><span class="line"><span class="type">void</span> <span class="title function_">monitor_path</span><span class="params">(<span class="type">const</span> <span class="built_in">std</span>::<span class="built_in">string</span>&amp; path)</span></span><br><span class="line">&#123;</span><br><span class="line">    <span class="type">const</span> <span class="keyword">auto</span> wPath = string2wstring(path);</span><br><span class="line">    DirectoryChangesReader <span class="title function_">dcr</span><span class="params">(wPath)</span>;</span><br><span class="line">    <span class="keyword">auto</span>&amp;&amp; flag = stop_flag.at(path);</span><br><span class="line">    <span class="keyword">while</span> (flag.load())</span><br><span class="line">    &#123;</span><br><span class="line">        dcr.EnqueueReadDirectoryChanges();</span><br><span class="line">        <span class="keyword">if</span> (<span class="type">const</span> DWORD rv = dcr.WaitForHandles(); rv == WAIT_OBJECT_0)</span><br><span class="line">        &#123;</span><br><span class="line">            <span class="keyword">for</span> (<span class="keyword">auto</span>&amp;&amp; res = dcr.GetDirectoryChangesResultW(); <span class="type">const</span> <span class="keyword">auto</span>&amp; [action, data] : res)</span><br><span class="line">            &#123;</span><br><span class="line">                <span class="keyword">switch</span> (action)</span><br><span class="line">                &#123;</span><br><span class="line">                <span class="keyword">case</span> FILE_ACTION_ADDED:</span><br><span class="line">                <span class="keyword">case</span> FILE_ACTION_RENAMED_NEW_NAME:</span><br><span class="line">                    <span class="keyword">if</span> (data.find(<span class="string">L&quot;$RECYCLE.BIN&quot;</span>) == <span class="built_in">std</span>::<span class="built_in">wstring</span>::npos)</span><br><span class="line">                    &#123;</span><br><span class="line">                        <span class="built_in">std</span>::<span class="built_in">wstring</span> data_with_disk;</span><br><span class="line">                        data_with_disk.append(wPath).append(data);</span><br><span class="line">                        add_record(data_with_disk);</span><br><span class="line">                    &#125;</span><br><span class="line">                    <span class="keyword">break</span>;</span><br><span class="line">                <span class="keyword">case</span> FILE_ACTION_REMOVED:</span><br><span class="line">                <span class="keyword">case</span> FILE_ACTION_RENAMED_OLD_NAME:</span><br><span class="line">                    <span class="keyword">if</span> (data.find(<span class="string">L&quot;$RECYCLE.BIN&quot;</span>) == <span class="built_in">std</span>::<span class="built_in">wstring</span>::npos)</span><br><span class="line">                    &#123;</span><br><span class="line">                        <span class="built_in">std</span>::<span class="built_in">wstring</span> data_with_disk;</span><br><span class="line">                        data_with_disk.append(wPath).append(data);</span><br><span class="line">                        delete_record(data_with_disk);</span><br><span class="line">                    &#125;</span><br><span class="line">                    <span class="keyword">break</span>;</span><br><span class="line">                <span class="keyword">case</span> FILE_ACTION_MODIFIED:</span><br><span class="line">                <span class="keyword">default</span>:</span><br><span class="line">                    <span class="keyword">break</span>;</span><br><span class="line">                &#125;</span><br><span class="line">            &#125;</span><br><span class="line">        &#125;</span><br><span class="line">        Sleep(<span class="number">10</span>);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h3 id="DirectoryChangesReader"><a href="#DirectoryChangesReader" class="headerlink" title="DirectoryChangesReader"></a>DirectoryChangesReader</h3><p>将ReadDirectoryChanges()方法的调用封装进DirectoryChangesReader对象中，当调用EnqueueReadDirectoryChanges()方法后，文件更改记录将会被写入缓存中。</p>
+<p>然后执行GetDirectoryChangesResultW()方法，调用GetOverlappedResult()方法读取出文件更改信息，然后将所有信息保存进一个vector中，再返回。</p>
+<p><a target="_blank" rel="noopener" href="https://learn.microsoft.com/en-us/windows/win32/api/ioapiset/nf-ioapiset-getoverlappedresult">GetOverlappedResult function (ioapiset.h) - Win32 apps | Microsoft Learn</a></p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br><span class="line">88</span><br><span class="line">89</span><br><span class="line">90</span><br><span class="line">91</span><br><span class="line">92</span><br><span class="line">93</span><br><span class="line">94</span><br><span class="line">95</span><br><span class="line">96</span><br><span class="line">97</span><br><span class="line">98</span><br><span class="line">99</span><br><span class="line">100</span><br><span class="line">101</span><br><span class="line">102</span><br><span class="line">103</span><br><span class="line">104</span><br><span class="line">105</span><br><span class="line">106</span><br><span class="line">107</span><br><span class="line">108</span><br><span class="line">109</span><br><span class="line">110</span><br><span class="line">111</span><br><span class="line">112</span><br><span class="line">113</span><br><span class="line">114</span><br><span class="line">115</span><br><span class="line">116</span><br><span class="line">117</span><br><span class="line">118</span><br><span class="line">119</span><br><span class="line">120</span><br><span class="line">121</span><br><span class="line">122</span><br><span class="line">123</span><br><span class="line">124</span><br><span class="line">125</span><br><span class="line">126</span><br><span class="line">127</span><br><span class="line">128</span><br><span class="line">129</span><br><span class="line">130</span><br><span class="line">131</span><br><span class="line">132</span><br><span class="line">133</span><br><span class="line">134</span><br><span class="line">135</span><br><span class="line">136</span><br><span class="line">137</span><br><span class="line">138</span><br><span class="line">139</span><br><span class="line">140</span><br><span class="line">141</span><br><span class="line">142</span><br><span class="line">143</span><br><span class="line">144</span><br><span class="line">145</span><br><span class="line">146</span><br><span class="line">147</span><br><span class="line">148</span><br><span class="line">149</span><br><span class="line">150</span><br><span class="line">151</span><br><span class="line">152</span><br><span class="line">153</span><br><span class="line">154</span><br><span class="line">155</span><br><span class="line">156</span><br><span class="line">157</span><br><span class="line">158</span><br><span class="line">159</span><br><span class="line">160</span><br><span class="line">161</span><br><span class="line">162</span><br><span class="line">163</span><br><span class="line">164</span><br><span class="line">165</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">pragma</span> once</span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;Windows.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;thread&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;unordered_set&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;mutex&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="comment">// A base class for handles with different invalid values.</span></span><br><span class="line"><span class="keyword">template</span> &lt;std::<span class="type">uintptr_t</span> hInvalid&gt;</span><br><span class="line"><span class="keyword">class</span> <span class="title class_">Handle</span></span><br><span class="line">&#123;</span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="built_in">Handle</span>(<span class="type">const</span> Handle&amp;) = <span class="keyword">delete</span>;</span><br><span class="line"></span><br><span class="line">    <span class="built_in">Handle</span>(Handle&amp;&amp; rhs) <span class="keyword">noexcept</span> :</span><br><span class="line">        <span class="built_in">hHandle</span>(std::<span class="built_in">exchange</span>(rhs.hHandle, hInvalid))</span><br><span class="line">    &#123;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    Handle&amp; <span class="keyword">operator</span>=(<span class="type">const</span> Handle&amp;) = <span class="keyword">delete</span>;</span><br><span class="line"></span><br><span class="line">    Handle&amp; <span class="keyword">operator</span>=(Handle&amp;&amp; rhs) <span class="keyword">noexcept</span></span><br><span class="line">    &#123;</span><br><span class="line">        std::<span class="built_in">swap</span>(hHandle, rhs.hHandle);</span><br><span class="line">        <span class="keyword">return</span> *<span class="keyword">this</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// converting to a normal HANDLE</span></span><br><span class="line">    <span class="function"><span class="keyword">operator</span> <span class="title">HANDLE</span><span class="params">()</span> <span class="type">const</span> </span>&#123; <span class="keyword">return</span> hHandle; &#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">protected</span>:</span><br><span class="line">    <span class="built_in">Handle</span>(HANDLE v) : <span class="built_in">hHandle</span>(v)</span><br><span class="line">    &#123;</span><br><span class="line">        <span class="comment">// throw if we got an invalid handle</span></span><br><span class="line">        <span class="keyword">if</span> (hHandle == <span class="built_in">reinterpret_cast</span>&lt;HANDLE&gt;(hInvalid) || hHandle == INVALID_HANDLE_VALUE)</span><br><span class="line">            <span class="keyword">throw</span> std::<span class="built_in">runtime_error</span>(<span class="string">&quot;invalid handle&quot;</span>);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    ~<span class="built_in">Handle</span>()</span><br><span class="line">    &#123;</span><br><span class="line">        <span class="keyword">if</span> (hHandle != <span class="built_in">reinterpret_cast</span>&lt;HANDLE&gt;(hInvalid)) <span class="built_in">CloseHandle</span>(hHandle);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">private</span>:</span><br><span class="line">    HANDLE hHandle;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="keyword">using</span> InvalidNullptrHandle = Handle&lt;(std::<span class="type">uintptr_t</span>)<span class="literal">nullptr</span>&gt;;</span><br><span class="line"></span><br><span class="line"><span class="comment">// A class for directory handles</span></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">DirectoryHandleW</span> : <span class="keyword">public</span> InvalidNullptrHandle</span><br><span class="line">&#123;</span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="built_in">DirectoryHandleW</span>(<span class="type">const</span> std::wstring&amp; dir) :</span><br><span class="line">        <span class="built_in">Handle</span>(</span><br><span class="line">            <span class="built_in">CreateFileW</span>(</span><br><span class="line">                dir.<span class="built_in">c_str</span>(), FILE_LIST_DIRECTORY,</span><br><span class="line">                FILE_SHARE_READ | FILE_SHARE_DELETE | FILE_SHARE_WRITE,</span><br><span class="line">                <span class="literal">nullptr</span>, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS |</span><br><span class="line">                FILE_FLAG_OVERLAPPED, <span class="literal">nullptr</span>)</span><br><span class="line">        )</span><br><span class="line">    &#123;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="comment">// A class for event handles</span></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">EventHandle</span> : <span class="keyword">public</span> InvalidNullptrHandle</span><br><span class="line">&#123;</span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="built_in">EventHandle</span>() : <span class="built_in">Handle</span>(<span class="built_in">CreateEvent</span>(<span class="literal">nullptr</span>, <span class="literal">true</span>, <span class="literal">false</span>, <span class="literal">nullptr</span>))</span><br><span class="line">    &#123;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="comment">// A stepping function for FILE_NOTIFY_INFORMATION*</span></span><br><span class="line"><span class="function"><span class="type">bool</span> <span class="title">StepToNextNotifyInformation</span><span class="params">(FILE_NOTIFY_INFORMATION*&amp; cur)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">if</span> (cur-&gt;NextEntryOffset == <span class="number">0</span>) <span class="keyword">return</span> <span class="literal">false</span>;</span><br><span class="line">    cur = <span class="built_in">reinterpret_cast</span>&lt;FILE_NOTIFY_INFORMATION*&gt;(</span><br><span class="line">        <span class="built_in">reinterpret_cast</span>&lt;<span class="type">char</span>*&gt;(cur) + cur-&gt;NextEntryOffset</span><br><span class="line">        );</span><br><span class="line">    <span class="keyword">return</span> <span class="literal">true</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">// A ReadDirectoryChanges support class</span></span><br><span class="line"><span class="keyword">template</span> &lt;<span class="type">size_t</span> Handles = <span class="number">1</span>, <span class="type">size_t</span> BufByteSize = <span class="number">4096</span>&gt;</span><br><span class="line"><span class="keyword">class</span> DirectoryChangesReader</span><br><span class="line">&#123;</span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="built_in">static_assert</span>(Handles &gt; <span class="number">0</span>, <span class="string">&quot;There must be room for at least 1 HANDLE&quot;</span>);</span><br><span class="line">    <span class="built_in">static_assert</span>(BufByteSize &gt;= <span class="built_in">sizeof</span>(FILE_NOTIFY_INFORMATION) + MAX_PATH, <span class="string">&quot;BufByteSize too small&quot;</span>);</span><br><span class="line">    <span class="built_in">static_assert</span>(BufByteSize % <span class="built_in">sizeof</span>(DWORD) == <span class="number">0</span>, <span class="string">&quot;BufByteSize must be a multiple of sizeof(DWORD)&quot;</span>);</span><br><span class="line"></span><br><span class="line">    <span class="built_in">DirectoryChangesReader</span>(<span class="type">const</span> std::wstring&amp; dirname) :</span><br><span class="line">        <span class="built_in">hDir</span>(dirname),</span><br><span class="line">        ovl&#123;&#125;,</span><br><span class="line">        hEv&#123;&#125;,</span><br><span class="line">        handles&#123; hEv &#125;,</span><br><span class="line">        buffer&#123; std::<span class="built_in">make_unique</span>&lt;DWORD[]&gt;(BufByteSize / <span class="built_in">sizeof</span>(DWORD)) &#125;</span><br><span class="line">    &#123;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// A function to fill in data to use with ReadDirectoryChangesW</span></span><br><span class="line">    <span class="function"><span class="type">void</span> <span class="title">EnqueueReadDirectoryChanges</span><span class="params">()</span></span></span><br><span class="line"><span class="function">    </span>&#123;</span><br><span class="line">        ovl = OVERLAPPED&#123;&#125;;</span><br><span class="line">        ovl.hEvent = hEv;</span><br><span class="line">        <span class="type">const</span> BOOL rdc = <span class="built_in">ReadDirectoryChangesW</span>(</span><br><span class="line">            hDir,</span><br><span class="line">            buffer.<span class="built_in">get</span>(),</span><br><span class="line">            BufByteSize,</span><br><span class="line">            TRUE,</span><br><span class="line">            FILE_NOTIFY_CHANGE_FILE_NAME | FILE_NOTIFY_CHANGE_DIR_NAME |</span><br><span class="line">            FILE_NOTIFY_CHANGE_ATTRIBUTES | FILE_NOTIFY_CHANGE_SIZE |</span><br><span class="line">            FILE_NOTIFY_CHANGE_LAST_WRITE | FILE_NOTIFY_CHANGE_LAST_ACCESS |</span><br><span class="line">            FILE_NOTIFY_CHANGE_CREATION | FILE_NOTIFY_CHANGE_SECURITY,</span><br><span class="line">            <span class="literal">nullptr</span>,</span><br><span class="line">            &amp;ovl,</span><br><span class="line">            <span class="literal">nullptr</span></span><br><span class="line">        );</span><br><span class="line">        <span class="keyword">if</span> (rdc == <span class="number">0</span>) <span class="keyword">throw</span> std::<span class="built_in">runtime_error</span>(<span class="string">&quot;EnqueueReadDirectoryChanges failed&quot;</span>);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// A function to get a vector of &lt;Action&gt;, &lt;Filename&gt; pairs</span></span><br><span class="line">    std::vector&lt;std::pair&lt;DWORD, std::wstring&gt;&gt;</span><br><span class="line">        <span class="built_in">GetDirectoryChangesResultW</span>()</span><br><span class="line">    &#123;</span><br><span class="line">        std::vector&lt;std::pair&lt;DWORD, std::wstring&gt;&gt; retval;</span><br><span class="line"></span><br><span class="line">        <span class="keyword">auto</span>* fni = <span class="built_in">reinterpret_cast</span>&lt;FILE_NOTIFY_INFORMATION*&gt;(buffer.<span class="built_in">get</span>());</span><br><span class="line"></span><br><span class="line">        DWORD ovlBytesReturned;</span><br><span class="line">        <span class="keyword">if</span> (<span class="built_in">GetOverlappedResult</span>(hDir, &amp;ovl, &amp;ovlBytesReturned, TRUE))</span><br><span class="line">        &#123;</span><br><span class="line">            <span class="keyword">do</span></span><br><span class="line">            &#123;</span><br><span class="line">                retval.<span class="built_in">emplace_back</span>(</span><br><span class="line">                    fni-&gt;Action,</span><br><span class="line">                    std::wstring&#123;</span><br><span class="line">                        fni-&gt;FileName,</span><br><span class="line">                        fni-&gt;FileName + fni-&gt;FileNameLength / <span class="built_in">sizeof</span>(<span class="type">wchar_t</span>)</span><br><span class="line">                    &#125;</span><br><span class="line">                );</span><br><span class="line">            &#125; <span class="keyword">while</span> (<span class="built_in">StepToNextNotifyInformation</span>(fni));</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="keyword">return</span> retval;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// wait for the handles in the handles array</span></span><br><span class="line">    <span class="function">DWORD <span class="title">WaitForHandles</span><span class="params">()</span></span></span><br><span class="line"><span class="function">    </span>&#123;</span><br><span class="line">        <span class="keyword">constexpr</span> DWORD wait_threshold = <span class="number">5000</span>;</span><br><span class="line">        <span class="keyword">return</span> ::<span class="built_in">WaitForMultipleObjects</span>(Handles, handles, <span class="literal">false</span>, wait_threshold);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// access to the handles array</span></span><br><span class="line">    HANDLE&amp; <span class="keyword">operator</span>[](<span class="type">size_t</span> idx) &#123; <span class="keyword">return</span> handles[idx]; &#125;</span><br><span class="line">    <span class="function"><span class="keyword">constexpr</span> <span class="type">size_t</span> <span class="title">handles_count</span><span class="params">()</span> <span class="type">const</span> </span>&#123; <span class="keyword">return</span> Handles; &#125;</span><br><span class="line"><span class="keyword">private</span>:</span><br><span class="line">    DirectoryHandleW hDir;</span><br><span class="line">    OVERLAPPED ovl;</span><br><span class="line">    EventHandle hEv;</span><br><span class="line">    HANDLE handles[Handles];</span><br><span class="line">    std::unique_ptr&lt;DWORD[]&gt; buffer; <span class="comment">// DWORD-aligned</span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+
+<h2 id="至此，实现Everything第二步，监控文件变化完成。"><a href="#至此，实现Everything第二步，监控文件变化完成。" class="headerlink" title="至此，实现Everything第二步，监控文件变化完成。"></a>至此，实现Everything第二步，监控文件变化完成。</h2><h3 id="三、实现UI界面"><a href="#三、实现UI界面" class="headerlink" title="三、实现UI界面"></a>三、实现UI界面</h3><p>    由于项目是我几年前写的，所以当时用了Java的Swing框架。上文写到的创建数据库索引的工具编译成了exe，由Java调用。而监控文件变化的工具编译成了dll，通过jni进行调用。</p>
+<p>    <strong>1. 首先，制作一个搜索框</strong></p>
+<p>    使用JFrame创建窗口，JTextField放上面作为搜索框，下面放JLabel作为结果的显示就好，这里就不再贴代码。</p>
+<p>    <strong>2. 监听用户输入，并查询数据库</strong></p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">private</span> <span class="keyword">void</span> <span class="title function_">addTextFieldDocumentListener</span><span class="params">()</span> &#123;</span><br><span class="line">        textField.getDocument().addDocumentListener(<span class="keyword">new</span> <span class="title class_">DocumentListener</span>() &#123;</span><br><span class="line">            <span class="keyword">private</span> <span class="type">boolean</span> isSendSignal;</span><br><span class="line"></span><br><span class="line">            <span class="meta">@Override</span></span><br><span class="line">            <span class="keyword">public</span> <span class="keyword">void</span> <span class="title function_">insertUpdate</span><span class="params">(DocumentEvent e)</span> &#123;</span><br><span class="line">                changeFontOnDisplayFailed();</span><br><span class="line">                clearAllAndResetAll();</span><br><span class="line">                isSendSignal = setRunningMode();</span><br><span class="line">                <span class="keyword">if</span> (isSendSignal) &#123;</span><br><span class="line">                    startTime = System.currentTimeMillis();</span><br><span class="line">                    startSignal.set(<span class="literal">true</span>);</span><br><span class="line">                    isSqlNotInitialized.set(<span class="literal">true</span>);</span><br><span class="line">                &#125;</span><br><span class="line">                <span class="keyword">if</span> (runningMode == Constants.Enums.RunningMode.PLUGIN_MODE &amp;&amp; currentUsingPlugin != <span class="literal">null</span>) &#123;</span><br><span class="line">                    currentUsingPlugin.textChanged(getSearchBarText());</span><br><span class="line">                    currentUsingPlugin.clearResultQueue();</span><br><span class="line">                &#125;</span><br><span class="line">            &#125;</span><br><span class="line"></span><br><span class="line">            <span class="meta">@Override</span></span><br><span class="line">            <span class="keyword">public</span> <span class="keyword">void</span> <span class="title function_">removeUpdate</span><span class="params">(DocumentEvent e)</span> &#123;</span><br><span class="line">                changeFontOnDisplayFailed();</span><br><span class="line">                clearAllAndResetAll();</span><br><span class="line">                isSendSignal = setRunningMode();</span><br><span class="line">                <span class="keyword">if</span> (getSearchBarText().isEmpty()) &#123;</span><br><span class="line">                    lastMousePositionX = <span class="number">0</span>;</span><br><span class="line">                    lastMousePositionY = <span class="number">0</span>;</span><br><span class="line">                    listResultsNum.set(<span class="number">0</span>);</span><br><span class="line">                    currentResultCount.set(<span class="number">0</span>);</span><br><span class="line">                    startTime = System.currentTimeMillis();</span><br><span class="line">                    startSignal.set(<span class="literal">false</span>);</span><br><span class="line">                    isSqlNotInitialized.set(<span class="literal">false</span>);</span><br><span class="line">                &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">                    <span class="keyword">if</span> (isSendSignal) &#123;</span><br><span class="line">                        startTime = System.currentTimeMillis();</span><br><span class="line">                        startSignal.set(<span class="literal">true</span>);</span><br><span class="line">                        isSqlNotInitialized.set(<span class="literal">true</span>);</span><br><span class="line">                    &#125;</span><br><span class="line">                    <span class="keyword">if</span> (runningMode == Constants.Enums.RunningMode.PLUGIN_MODE &amp;&amp; currentUsingPlugin != <span class="literal">null</span>) &#123;</span><br><span class="line">                        currentUsingPlugin.textChanged(getSearchBarText());</span><br><span class="line">                        currentUsingPlugin.clearResultQueue();</span><br><span class="line">                    &#125;</span><br><span class="line">                &#125;</span><br><span class="line">            &#125;</span><br><span class="line"></span><br><span class="line">            <span class="meta">@Override</span></span><br><span class="line">            <span class="keyword">public</span> <span class="keyword">void</span> <span class="title function_">changedUpdate</span><span class="params">(DocumentEvent e)</span> &#123;</span><br><span class="line">                startTime = System.currentTimeMillis();</span><br><span class="line">                startSignal.set(<span class="literal">false</span>);</span><br><span class="line">                isSqlNotInitialized.set(<span class="literal">false</span>);</span><br><span class="line">            &#125;</span><br><span class="line">        &#125;);</span><br><span class="line">    &#125;</span><br></pre></td></tr></table></figure>
+
+<p>    这里采用记录startTime和startSignal的方式，通过线程池来检测搜索信号，并进行数据库的搜索。</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/**</span></span><br><span class="line"><span class="comment">    * 生成未格式化的sql</span></span><br><span class="line"><span class="comment">    * 第一个map中key保存未格式化的sql，value保存表名称，第二个map为搜索结果的暂时存储容器</span></span><br><span class="line"><span class="comment">    *</span></span><br><span class="line"><span class="comment">    * <span class="doctag">@return</span> map</span></span><br><span class="line"><span class="comment">    */</span></span><br><span class="line">   <span class="keyword">private</span> LinkedHashMap&lt;LinkedHashMap&lt;String, String&gt;, ConcurrentSkipListSet&lt;String&gt;&gt; <span class="title function_">getNonFormattedSqlFromTableQueue</span><span class="params">()</span> &#123;</span><br><span class="line">       <span class="keyword">if</span> (isDatabaseUpdated.get()) &#123;</span><br><span class="line">           isDatabaseUpdated.set(<span class="literal">false</span>);</span><br><span class="line">           initPriority();</span><br><span class="line">       &#125;</span><br><span class="line">       LinkedHashMap&lt;LinkedHashMap&lt;String, String&gt;, ConcurrentSkipListSet&lt;String&gt;&gt; sqlColumnMap = <span class="keyword">new</span> <span class="title class_">LinkedHashMap</span>&lt;&gt;();</span><br><span class="line">       <span class="keyword">if</span> (priorityMap.isEmpty()) &#123;</span><br><span class="line">           <span class="keyword">return</span> sqlColumnMap;</span><br><span class="line">       &#125;</span><br><span class="line">       initTableQueueByPriority();</span><br><span class="line">       <span class="type">int</span> <span class="variable">asciiSum</span> <span class="operator">=</span> <span class="number">0</span>;</span><br><span class="line">       <span class="keyword">if</span> (keywords.get() != <span class="literal">null</span>) &#123;</span><br><span class="line">           <span class="keyword">for</span> (String keyword : keywords.get()) &#123;</span><br><span class="line">               <span class="type">int</span> <span class="variable">ascII</span> <span class="operator">=</span> GetAscII.INSTANCE.getAscII(keyword);</span><br><span class="line">               asciiSum += Math.max(ascII, <span class="number">0</span>);</span><br><span class="line">           &#125;</span><br><span class="line">       &#125;</span><br><span class="line">       <span class="type">int</span> <span class="variable">asciiGroup</span> <span class="operator">=</span> asciiSum / <span class="number">100</span>;</span><br><span class="line">       <span class="type">String</span> <span class="variable">firstTableName</span> <span class="operator">=</span> <span class="string">&quot;list&quot;</span> + asciiGroup;</span><br><span class="line">       <span class="keyword">if</span> (searchCase.get() != <span class="literal">null</span> &amp;&amp; Arrays.asList(searchCase.get()).contains(<span class="string">&quot;d&quot;</span>)) &#123;</span><br><span class="line">           LinkedHashMap&lt;String, String&gt; _priorityMap = <span class="keyword">new</span> <span class="title class_">LinkedHashMap</span>&lt;&gt;();</span><br><span class="line">           <span class="type">String</span> <span class="variable">_sql</span> <span class="operator">=</span> <span class="string">&quot;SELECT %s FROM &quot;</span> + firstTableName + <span class="string">&quot; WHERE PRIORITY=&quot;</span> + <span class="number">0</span>;</span><br><span class="line">           _priorityMap.put(_sql, firstTableName);</span><br><span class="line">           tableQueue.stream().filter(each -&gt; !each.equals(firstTableName)).forEach(each -&gt; &#123;</span><br><span class="line">               <span class="type">String</span> <span class="variable">sql</span> <span class="operator">=</span> <span class="string">&quot;SELECT %s FROM &quot;</span> + each + <span class="string">&quot; WHERE PRIORITY=&quot;</span> + <span class="number">0</span>;</span><br><span class="line">               _priorityMap.put(sql, each);</span><br><span class="line">           &#125;);</span><br><span class="line">           ConcurrentSkipListSet&lt;String&gt; container;</span><br><span class="line">           container = <span class="keyword">new</span> <span class="title class_">ConcurrentSkipListSet</span>&lt;&gt;();</span><br><span class="line">           sqlColumnMap.put(_priorityMap, container);</span><br><span class="line">       &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">           <span class="keyword">for</span> (Pair i : priorityMap) &#123;</span><br><span class="line">               LinkedHashMap&lt;String, String&gt; eachPriorityMap = <span class="keyword">new</span> <span class="title class_">LinkedHashMap</span>&lt;&gt;();</span><br><span class="line">               <span class="type">String</span> <span class="variable">_sql</span> <span class="operator">=</span> <span class="string">&quot;SELECT %s FROM &quot;</span> + firstTableName + <span class="string">&quot; WHERE PRIORITY=&quot;</span> + i.priority;</span><br><span class="line">               eachPriorityMap.put(_sql, firstTableName);</span><br><span class="line">               tableQueue.stream().filter(each -&gt; !each.equals(firstTableName)).forEach(each -&gt; &#123;</span><br><span class="line">                   <span class="type">String</span> <span class="variable">sql</span> <span class="operator">=</span> <span class="string">&quot;SELECT %s FROM &quot;</span> + each + <span class="string">&quot; WHERE PRIORITY=&quot;</span> + i.priority;</span><br><span class="line">                   eachPriorityMap.put(sql, each);</span><br><span class="line">               &#125;);</span><br><span class="line">               ConcurrentSkipListSet&lt;String&gt; container;</span><br><span class="line">               container = <span class="keyword">new</span> <span class="title class_">ConcurrentSkipListSet</span>&lt;&gt;();</span><br><span class="line">               sqlColumnMap.put(eachPriorityMap, container);</span><br><span class="line">           &#125;</span><br><span class="line">       &#125;</span><br><span class="line">       tableQueue.clear();</span><br><span class="line">       <span class="keyword">return</span> sqlColumnMap;</span><br><span class="line">   &#125;</span><br></pre></td></tr></table></figure>
+
+<p>    这一步生成所有的查询SQL，简单来说就是生成<strong>SELECT * FROM [数据表]</strong> 命令并执行，这里因为后面是异步多线程查询，所以为每一个SQL语句都分配了一个用来装数据的容器，后续再进行合并，提高效率，%s字符串格式化主要是为后来可能增加的字段留出升级空间。</p>
+<p>    <strong>3. 字符串匹配</strong></p>
+<p>    运行SQL后，文件路径将被查出来，通过文件名匹配。</p>
+<p>    这里我添加了路径搜索，以及是否忽略大小写和拼音搜索的功能。如果只是单纯的匹配字符串，直接用string.contains()或者string.indexof()即可。</p>
+<p>    关于为什么不使用KMP算法而只是暴力匹配。因为文件路径中并不存在大量重复字符串，并且路径字符串一般都不会很长。此时使用KMP算法由于大量运算反而会起反效果。</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/**</span></span><br><span class="line"><span class="comment">     * 判断文件路径是否满足当前匹配结果（该方法由check方法使用），检查文件路径使用check方法。</span></span><br><span class="line"><span class="comment">     *</span></span><br><span class="line"><span class="comment">     * <span class="doctag">@param</span> path         文件路径</span></span><br><span class="line"><span class="comment">     * <span class="doctag">@param</span> isIgnoreCase 是否忽略大小谢</span></span><br><span class="line"><span class="comment">     * <span class="doctag">@return</span> true如果匹配成功</span></span><br><span class="line"><span class="comment">     * <span class="doctag">@see</span> #check(String, String[], String, String[])  ;</span></span><br><span class="line"><span class="comment">     */</span></span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">static</span> <span class="type">boolean</span> <span class="title function_">notMatched</span><span class="params">(String path, <span class="type">boolean</span> isIgnoreCase, String[] keywords)</span> &#123;</span><br><span class="line">        String matcherStrFromFilePath;</span><br><span class="line">        <span class="type">boolean</span> isPath;</span><br><span class="line">        <span class="keyword">for</span> (String eachKeyword : keywords) &#123;</span><br><span class="line">            <span class="keyword">if</span> (eachKeyword == <span class="literal">null</span> || eachKeyword.isEmpty()) &#123;</span><br><span class="line">                <span class="keyword">continue</span>;</span><br><span class="line">            &#125;</span><br><span class="line">            <span class="type">char</span> <span class="variable">firstChar</span> <span class="operator">=</span> eachKeyword.charAt(<span class="number">0</span>);</span><br><span class="line">            <span class="keyword">if</span> (firstChar == <span class="string">&#x27;/&#x27;</span> || firstChar == File.separatorChar) &#123;</span><br><span class="line">                <span class="comment">//匹配路径</span></span><br><span class="line">                isPath = <span class="literal">true</span>;</span><br><span class="line">                <span class="type">Matcher</span> <span class="variable">matcher</span> <span class="operator">=</span> RegexUtil.slash.matcher(eachKeyword);</span><br><span class="line">                eachKeyword = matcher.replaceAll(Matcher.quoteReplacement(<span class="string">&quot;&quot;</span>));</span><br><span class="line">                <span class="comment">//获取父路径</span></span><br><span class="line">                matcherStrFromFilePath = FileUtil.getParentPath(path);</span><br><span class="line">            &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">                <span class="comment">//获取名字</span></span><br><span class="line">                isPath = <span class="literal">false</span>;</span><br><span class="line">                matcherStrFromFilePath = FileUtil.getFileName(path);</span><br><span class="line">            &#125;</span><br><span class="line">            <span class="comment">//转换大小写</span></span><br><span class="line">            <span class="keyword">if</span> (isIgnoreCase) &#123;</span><br><span class="line">                matcherStrFromFilePath = matcherStrFromFilePath.toLowerCase();</span><br><span class="line">                eachKeyword = eachKeyword.toLowerCase();</span><br><span class="line">            &#125;</span><br><span class="line">            <span class="comment">//开始匹配</span></span><br><span class="line">            <span class="keyword">if</span> (matcherStrFromFilePath.indexOf(eachKeyword) == -<span class="number">1</span>) &#123;</span><br><span class="line">                <span class="keyword">if</span> (isPath) &#123;</span><br><span class="line">                    <span class="keyword">return</span> <span class="literal">true</span>;</span><br><span class="line">                &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">                    <span class="keyword">if</span> (PinyinUtil.isStringContainChinese(matcherStrFromFilePath)) &#123;</span><br><span class="line">                        <span class="keyword">if</span> (PinyinUtil.toPinyin(matcherStrFromFilePath, <span class="string">&quot;&quot;</span>).indexOf(eachKeyword) == -<span class="number">1</span>) &#123;</span><br><span class="line">                            <span class="keyword">return</span> <span class="literal">true</span>;</span><br><span class="line">                        &#125;</span><br><span class="line">                    &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">                        <span class="keyword">return</span> <span class="literal">true</span>;</span><br><span class="line">                    &#125;</span><br><span class="line">                &#125;</span><br><span class="line">            &#125;</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">false</span>;</span><br><span class="line">    &#125;</span><br></pre></td></tr></table></figure>
+
+<p>    <strong>4. 显示结果</strong></p>
+<p>    最后直接将搜索出来的结果显示在JLabel上就好了，这里就不再粘贴代码。</p>
+<h2 id="至此，一个最基本的Everything制作完成"><a href="#至此，一个最基本的Everything制作完成" class="headerlink" title="至此，一个最基本的Everything制作完成"></a>至此，一个最基本的Everything制作完成</h2><p>项目源代码在Github开源。<a target="_blank" rel="noopener" href="https://github.com/XUANXUQAQ/File-Engine">XUANXUQAQ/File-Engine: An app launcher &amp;&amp; efficiency tool (github.com)</a></p>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2022/07/22/jvm-volatile/" rel="prev" title="Java volatile关键字以及线程安全">
+      <i class="fa fa-chevron-left"></i> Java volatile关键字以及线程安全
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/2023/01/16/GPU/" rel="next" title="GPU搜索加速原理">
+      GPU搜索加速原理 <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          文章目录
+        </li>
+        <li class="sidebar-nav-overview">
+          站点概览
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#Everything%E7%9A%84%E5%B7%A5%E4%BD%9C%E5%8E%9F%E7%90%86"><span class="nav-number">1.</span> <span class="nav-text">Everything的工作原理</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E8%87%AA%E5%B7%B1%E5%AE%9E%E7%8E%B0%E4%B8%80%E4%B8%AAEverything"><span class="nav-number">2.</span> <span class="nav-text">自己实现一个Everything</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%80%E3%80%81%E5%BB%BA%E7%AB%8B%E6%95%B0%E6%8D%AE%E5%BA%93%E7%B4%A2%E5%BC%95"><span class="nav-number">2.1.</span> <span class="nav-text">一、建立数据库索引</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%AD%A4%E6%97%B6%EF%BC%8C%E6%88%91%E4%BB%AC%E5%B7%B2%E7%BB%8F%E5%AE%9E%E7%8E%B0%E4%BA%86%E5%AE%9E%E7%8E%B0Everything%E7%9A%84%E7%AC%AC%E4%B8%80%E6%AD%A5%EF%BC%8C%E5%BB%BA%E7%AB%8B%E6%95%B0%E6%8D%AE%E5%BA%93%E7%B4%A2%E5%BC%95%E3%80%82"><span class="nav-number">3.</span> <span class="nav-text">此时，我们已经实现了实现Everything的第一步，建立数据库索引。</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%BA%8C%E3%80%81%E7%9B%91%E6%8E%A7%E6%96%87%E4%BB%B6%E7%9A%84%E5%8F%98%E5%8C%96"><span class="nav-number">3.1.</span> <span class="nav-text">二、监控文件的变化</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#DirectoryChangesReader"><span class="nav-number">3.2.</span> <span class="nav-text">DirectoryChangesReader</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E8%87%B3%E6%AD%A4%EF%BC%8C%E5%AE%9E%E7%8E%B0Everything%E7%AC%AC%E4%BA%8C%E6%AD%A5%EF%BC%8C%E7%9B%91%E6%8E%A7%E6%96%87%E4%BB%B6%E5%8F%98%E5%8C%96%E5%AE%8C%E6%88%90%E3%80%82"><span class="nav-number">4.</span> <span class="nav-text">至此，实现Everything第二步，监控文件变化完成。</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%89%E3%80%81%E5%AE%9E%E7%8E%B0UI%E7%95%8C%E9%9D%A2"><span class="nav-number">4.1.</span> <span class="nav-text">三、实现UI界面</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E8%87%B3%E6%AD%A4%EF%BC%8C%E4%B8%80%E4%B8%AA%E6%9C%80%E5%9F%BA%E6%9C%AC%E7%9A%84Everything%E5%88%B6%E4%BD%9C%E5%AE%8C%E6%88%90"><span class="nav-number">5.</span> <span class="nav-text">至此，一个最基本的Everything制作完成</span></a></li></ol></div>
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="xuanxu"
+      src="https://i.imgtg.com/2023/03/22/9GMCK.jpg">
+  <p class="site-author-name" itemprop="name">xuanxu</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">9</span>
+          <span class="site-state-item-name">日志</span>
+        </a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2023</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">xuanxu</span>
+</div>
+  <div class="powered-by">由 <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://pisces.theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Pisces</a> 强力驱动
+  </div>
+
+        
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+</body>
+</html>

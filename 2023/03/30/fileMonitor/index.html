@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.4.2">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"example.com","root":"/","scheme":"Pisces","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":false,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="通过USN日志进行文件监控在以前的文章中有一篇是自己实现一个Everything，其中讲了通过readDirectChanges函数进行文件监控并同步的方法。但是这样的方法在监控整个磁盘时好像会漏掉一些文件。 下面介绍另一种方法，通过读取USN日志来进行文件的监控。 代码已经开源到GitHub，之前的ReadDirectoryChanges API的版本也有保存。 File-Engine&#x2F;C++&#x2F;">
+<meta property="og:type" content="article">
+<meta property="og:title" content="另一种文件监控的方法">
+<meta property="og:url" content="http://example.com/2023/03/30/fileMonitor/index.html">
+<meta property="og:site_name" content="Hexo">
+<meta property="og:description" content="通过USN日志进行文件监控在以前的文章中有一篇是自己实现一个Everything，其中讲了通过readDirectChanges函数进行文件监控并同步的方法。但是这样的方法在监控整个磁盘时好像会漏掉一些文件。 下面介绍另一种方法，通过读取USN日志来进行文件的监控。 代码已经开源到GitHub，之前的ReadDirectoryChanges API的版本也有保存。 File-Engine&#x2F;C++&#x2F;">
+<meta property="og:locale" content="zh_CN">
+<meta property="article:published_time" content="2023-03-29T22:14:00.000Z">
+<meta property="article:modified_time" content="2023-03-30T07:19:28.000Z">
+<meta property="article:author" content="xuanxu">
+<meta name="twitter:card" content="summary">
+
+<link rel="canonical" href="http://example.com/2023/03/30/fileMonitor/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh-CN'
+  };
+</script>
+
+  <title>另一种文件监控的方法 | Hexo</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="切换导航栏">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">Hexo</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>首页</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>归档</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2023/03/30/fileMonitor/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="https://i.imgtg.com/2023/03/22/9GMCK.jpg">
+      <meta itemprop="name" content="xuanxu">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Hexo">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          另一种文件监控的方法
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">发表于</span>
+              
+
+              <time title="创建时间：2023-03-30 06:14:00 / 修改时间：15:19:28" itemprop="dateCreated datePublished" datetime="2023-03-30T06:14:00+08:00">2023-03-30</time>
+            </span>
+
+          
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <h1 id="通过USN日志进行文件监控"><a href="#通过USN日志进行文件监控" class="headerlink" title="通过USN日志进行文件监控"></a>通过USN日志进行文件监控</h1><p>在以前的文章中有一篇是自己实现一个Everything，其中讲了通过readDirectChanges函数进行文件监控并同步的方法。但是这样的方法在监控整个磁盘时好像会漏掉一些文件。</p>
+<p>下面介绍另一种方法，通过读取USN日志来进行文件的监控。</p>
+<p>代码已经开源到GitHub，之前的ReadDirectoryChanges API的版本也有保存。</p>
+<p><a target="_blank" rel="noopener" href="https://github.com/XUANXUQAQ/File-Engine/tree/master/C%2B%2B/fileMonitor">File-Engine/C++/fileMonitor at master · XUANXUQAQ/File-Engine (github.com)</a></p>
+<p><a target="_blank" rel="noopener" href="https://github.com/XUANXUQAQ/File-Engine/tree/master/C%2B%2B/fileMonitorReadDirChanges">File-Engine/C++/fileMonitorReadDirChanges at master · XUANXUQAQ/File-Engine (github.com)</a></p>
+<p>代码以及资料参考自</p>
+<p><a target="_blank" rel="noopener" href="https://stackoverflow.com/questions/38885286/usn-nfts-change-notification-event-interrupt">windows - USN NFTS change notification event interrupt - Stack Overflow</a></p>
+<p><a target="_blank" rel="noopener" href="https://stackoverflow.com/questions/7421440/how-can-i-detect-only-deleted-changed-and-created-files-on-a-volume/7459109#7459109">c++ - How can I detect only deleted, changed, and created files on a volume? - Stack Overflow</a></p>
+<h2 id="原理"><a href="#原理" class="headerlink" title="原理"></a>原理</h2><p><a target="_blank" rel="noopener" href="https://learn.microsoft.com/en-us/windows/win32/fileio/obtaining-directory-change-notifications">Obtaining Directory Change Notifications - Win32 apps | Microsoft Learn</a></p>
+<p>在微软官网这篇文章中，详细写了如何获取文件夹的变化通知。</p>
+<p><a target="_blank" rel="noopener" href="https://learn.microsoft.com/en-us/windows/win32/fileio/change-journals">Change Journals - Win32 apps | Microsoft Learn</a></p>
+<p><a target="_blank" rel="noopener" href="https://learn.microsoft.com/en-us/previous-versions/windows/it-pro/windows-2000-server/bb742450(v=technet.10)">Keeping an Eye on Your NTFS Drives: the Windows 2000 Change Journal Explained | Microsoft Learn</a></p>
+<p>这里详细介绍了NTFS的usn日志是什么，以及usn日志的数据结构等。</p>
+<p>简单来说，每当一个文件进行变动，都会写入usn日志。我们可以通过监控是否有新的usn日志记录写入来判断是否有文件更改，并进行监控。</p>
+<h2 id="实现"><a href="#实现" class="headerlink" title="实现"></a>实现</h2><h3 id="定义监控类"><a href="#定义监控类" class="headerlink" title="定义监控类"></a>定义监控类</h3><p>首先定义一个NTFSChangesWatcher类</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">pragma</span> once</span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;memory&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;Windows.h&gt;</span></span></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">NTFSChangesWatcher</span></span><br><span class="line">&#123;</span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="built_in">NTFSChangesWatcher</span>(<span class="type">char</span> drive_letter);</span><br><span class="line">    ~<span class="built_in">NTFSChangesWatcher</span>() = <span class="keyword">default</span>;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// Method which runs an infinite loop and waits for new update sequence number in a journal.</span></span><br><span class="line">    <span class="comment">// The thread is blocked till the new USN record created in the journal.</span></span><br><span class="line">    <span class="function"><span class="type">void</span> <span class="title">WatchChanges</span><span class="params">(<span class="type">const</span> <span class="type">bool</span>* flag, <span class="type">void</span>(*)(<span class="type">const</span> std::u16string&amp;), <span class="type">void</span>(*)(<span class="type">const</span> std::u16string&amp;))</span></span>;</span><br><span class="line"></span><br><span class="line"><span class="keyword">private</span>:</span><br><span class="line">    <span class="function">HANDLE <span class="title">OpenVolume</span><span class="params">(<span class="type">char</span> drive_letter)</span></span>;</span><br><span class="line"></span><br><span class="line">    <span class="function"><span class="type">bool</span> <span class="title">CreateJournal</span><span class="params">(HANDLE volume)</span></span>;</span><br><span class="line"></span><br><span class="line">    <span class="function"><span class="type">bool</span> <span class="title">LoadJournal</span><span class="params">(HANDLE volume, USN_JOURNAL_DATA* journal_data)</span></span>;</span><br><span class="line"></span><br><span class="line">    <span class="function"><span class="type">bool</span> <span class="title">WaitForNextUsn</span><span class="params">(PREAD_USN_JOURNAL_DATA read_journal_data)</span> <span class="type">const</span></span>;</span><br><span class="line"></span><br><span class="line">    <span class="function">std::unique_ptr&lt;READ_USN_JOURNAL_DATA&gt; <span class="title">GetWaitForNextUsnQuery</span><span class="params">(USN start_usn)</span></span>;</span><br><span class="line"></span><br><span class="line">    <span class="function"><span class="type">bool</span> <span class="title">ReadJournalRecords</span><span class="params">(PREAD_USN_JOURNAL_DATA journal_query, LPVOID buffer,</span></span></span><br><span class="line"><span class="params"><span class="function">        DWORD&amp; byte_count)</span> <span class="type">const</span></span>;</span><br><span class="line"></span><br><span class="line">    <span class="function">USN <span class="title">ReadChangesAndNotify</span><span class="params">(USN low_usn, <span class="type">char</span>* buffer, <span class="type">void</span>(*)(<span class="type">const</span> std::u16string&amp;), <span class="type">void</span>(*)(<span class="type">const</span> std::u16string&amp;))</span></span>;</span><br><span class="line"></span><br><span class="line">    <span class="function">std::unique_ptr&lt;READ_USN_JOURNAL_DATA&gt; <span class="title">GetReadJournalQuery</span><span class="params">(USN low_usn)</span></span>;</span><br><span class="line"></span><br><span class="line">    <span class="function"><span class="type">void</span> <span class="title">showRecord</span><span class="params">(std::u16string&amp; full_path, USN_RECORD* record)</span></span>;</span><br><span class="line"></span><br><span class="line">    <span class="type">char</span> drive_letter_;</span><br><span class="line"></span><br><span class="line">    HANDLE volume_;</span><br><span class="line"></span><br><span class="line">    std::unique_ptr&lt;USN_JOURNAL_DATA&gt; journal_;</span><br><span class="line"></span><br><span class="line">    DWORDLONG journal_id_;</span><br><span class="line"></span><br><span class="line">    USN last_usn_;</span><br><span class="line"></span><br><span class="line">    USN max_usn_;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// Flags, which indicate which types of changes you want to listen.</span></span><br><span class="line">    <span class="type">static</span> <span class="type">const</span> <span class="type">int</span> FILE_CHANGE_BITMASK;</span><br><span class="line"></span><br><span class="line">    <span class="type">static</span> <span class="type">const</span> <span class="type">int</span> kBufferSize;</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+
+<p>对外的接口函数为WatchChanges</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">WatchChanges</span><span class="params">(<span class="type">const</span> <span class="type">bool</span>* flag, <span class="type">void</span>(*)(<span class="type">const</span> std::u16string&amp;), <span class="type">void</span>(*)(<span class="type">const</span> std::u16string&amp;))</span></span>;</span><br></pre></td></tr></table></figure>
+
+<p>函数有三个参数，第一个为停止监控文件标志，当设置为false将会退出循环。第二个参数为当新增文件时的回调函数指针，第三个参数为删除文件时的回调函数指针。</p>
+<h3 id="初始化USN日志"><a href="#初始化USN日志" class="headerlink" title="初始化USN日志"></a>初始化USN日志</h3><figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><span class="line"><span class="type">const</span> <span class="type">int</span> NTFSChangesWatcher::kBufferSize = <span class="number">1024</span> * <span class="number">1024</span> / <span class="number">2</span>;</span><br><span class="line"></span><br><span class="line"><span class="type">const</span> <span class="type">int</span> NTFSChangesWatcher::FILE_CHANGE_BITMASK = USN_REASON_RENAME_NEW_NAME | USN_REASON_RENAME_OLD_NAME;</span><br><span class="line"></span><br><span class="line">NTFSChangesWatcher::<span class="built_in">NTFSChangesWatcher</span>(<span class="type">char</span> drive_letter) :</span><br><span class="line">    <span class="built_in">drive_letter_</span>(drive_letter)</span><br><span class="line">&#123;</span><br><span class="line">    volume_ = <span class="built_in">OpenVolume</span>(drive_letter_);</span><br><span class="line"></span><br><span class="line">    journal_ = std::<span class="built_in">make_unique</span>&lt;USN_JOURNAL_DATA&gt;();</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (<span class="type">const</span> <span class="type">bool</span> res = <span class="built_in">LoadJournal</span>(volume_, journal_.<span class="built_in">get</span>()); !res) &#123;</span><br><span class="line">        <span class="built_in">fprintf</span>(stderr, <span class="string">&quot;Failed to load journal&quot;</span>);</span><br><span class="line">        <span class="keyword">return</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    max_usn_ = journal_-&gt;MaxUsn;</span><br><span class="line">    journal_id_ = journal_-&gt;UsnJournalID;</span><br><span class="line">    last_usn_ = journal_-&gt;NextUsn;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>首先通过OpenVolume打开磁盘，并返回一个HANDLE，然后分配存储日志的内存空间，接着通过LoadJournal读取usn日志。</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br></pre></td><td class="code"><pre><span class="line"><span class="function">HANDLE <span class="title">NTFSChangesWatcher::OpenVolume</span><span class="params">(<span class="type">const</span> <span class="type">char</span> drive_letter)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line"></span><br><span class="line">    <span class="type">wchar_t</span> pattern[<span class="number">10</span>] = <span class="string">L&quot;\\\\?\\a:&quot;</span>;</span><br><span class="line"></span><br><span class="line">    pattern[<span class="number">4</span>] = <span class="built_in">static_cast</span>&lt;<span class="type">wchar_t</span>&gt;(drive_letter);</span><br><span class="line"></span><br><span class="line">    <span class="type">const</span> HANDLE volume = <span class="built_in">CreateFile</span>(</span><br><span class="line">        pattern, <span class="comment">// lpFileName</span></span><br><span class="line">        <span class="comment">// also could be | FILE_READ_DATA | FILE_READ_ATTRIBUTES | SYNCHRONIZE</span></span><br><span class="line">        GENERIC_READ | GENERIC_WRITE | SYNCHRONIZE, <span class="comment">// dwDesiredAccess</span></span><br><span class="line">        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, <span class="comment">// share mode</span></span><br><span class="line">        <span class="literal">nullptr</span>, <span class="comment">// default security attributes</span></span><br><span class="line">        OPEN_EXISTING, <span class="comment">// disposition</span></span><br><span class="line">        <span class="comment">// It is always set, no matter whether you explicitly specify it or not. This means, that access</span></span><br><span class="line">        <span class="comment">// must be aligned with sector size so we can only read a number of bytes that is a multiple of the sector size.</span></span><br><span class="line">        FILE_FLAG_NO_BUFFERING, <span class="comment">// file attributes</span></span><br><span class="line">        <span class="literal">nullptr</span> <span class="comment">// do not copy file attributes</span></span><br><span class="line">    );</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (volume == INVALID_HANDLE_VALUE) &#123;</span><br><span class="line">        <span class="comment">// An error occurred!</span></span><br><span class="line">        <span class="built_in">fprintf</span>(stderr, <span class="string">&quot;Failed to open volume&quot;</span>);</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">nullptr</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> volume;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>获取HANDLE后，通过LoadJournal获取USN日志，第一次读取失败将会尝试创建后再次尝试读取。</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="type">bool</span> <span class="title">NTFSChangesWatcher::LoadJournal</span><span class="params">(HANDLE volume, USN_JOURNAL_DATA* journal_data)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line"></span><br><span class="line">    DWORD byte_count;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// Try to open journal.</span></span><br><span class="line">    <span class="keyword">if</span> (!<span class="built_in">DeviceIoControl</span>(volume,</span><br><span class="line">        FSCTL_QUERY_USN_JOURNAL,</span><br><span class="line">        <span class="literal">nullptr</span>,</span><br><span class="line">        <span class="number">0</span>,</span><br><span class="line">        journal_data,</span><br><span class="line">        <span class="built_in">sizeof</span>(*journal_data),</span><br><span class="line">        &amp;byte_count,</span><br><span class="line">        <span class="literal">nullptr</span>))</span><br><span class="line">    &#123;</span><br><span class="line">        <span class="comment">// If failed (for example, in case journaling is disabled), create journal and retry.</span></span><br><span class="line"></span><br><span class="line">        <span class="keyword">if</span> (<span class="built_in">CreateJournal</span>(volume)) &#123;</span><br><span class="line">            <span class="keyword">return</span> <span class="built_in">LoadJournal</span>(volume, journal_data);</span><br><span class="line">        &#125;</span><br><span class="line"></span><br><span class="line">        <span class="keyword">return</span> <span class="literal">false</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> <span class="literal">true</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">bool</span> <span class="title">NTFSChangesWatcher::CreateJournal</span><span class="params">(HANDLE volume)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line"></span><br><span class="line">    DWORD byte_count;</span><br><span class="line">    CREATE_USN_JOURNAL_DATA create_journal_data&#123;&#125;;</span><br><span class="line"></span><br><span class="line">    <span class="type">const</span> <span class="type">bool</span> ok = <span class="built_in">DeviceIoControl</span>(volume, <span class="comment">// handle to volume</span></span><br><span class="line">        FSCTL_CREATE_USN_JOURNAL,     <span class="comment">// dwIoControlCode</span></span><br><span class="line">        &amp;create_journal_data,         <span class="comment">// input buffer</span></span><br><span class="line">        <span class="built_in">sizeof</span>(create_journal_data),  <span class="comment">// size of input buffer</span></span><br><span class="line">        <span class="literal">nullptr</span>,                         <span class="comment">// lpOutBuffer</span></span><br><span class="line">        <span class="number">0</span>,                            <span class="comment">// nOutBufferSize</span></span><br><span class="line">        &amp;byte_count,                  <span class="comment">// number of bytes returned</span></span><br><span class="line">        <span class="literal">nullptr</span>) != <span class="number">0</span>;                   <span class="comment">// OVERLAPPED structure</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (!ok) &#123;</span><br><span class="line">        <span class="comment">// An error occurred!</span></span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> ok;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h3 id="开始监控"><a href="#开始监控" class="headerlink" title="开始监控"></a>开始监控</h3><p>初始化完成之后就可以调用WatchChanges函数</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">NTFSChangesWatcher::WatchChanges</span><span class="params">(<span class="type">const</span> <span class="type">bool</span>* flag,</span></span></span><br><span class="line"><span class="params"><span class="function">    <span class="type">void</span>(*file_added_callback_func)(<span class="type">const</span> std::u16string&amp;),</span></span></span><br><span class="line"><span class="params"><span class="function">    <span class="type">void</span>(*file_removed_callback_func)(<span class="type">const</span> std::u16string&amp;))</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="type">const</span> <span class="keyword">auto</span> u_buffer = std::<span class="built_in">make_unique</span>&lt;<span class="type">char</span>[]&gt;(kBufferSize);</span><br><span class="line"></span><br><span class="line">    <span class="type">const</span> <span class="keyword">auto</span> read_journal_query = <span class="built_in">GetWaitForNextUsnQuery</span>(last_usn_);</span><br><span class="line"></span><br><span class="line">    <span class="keyword">while</span> (*flag) </span><br><span class="line">    &#123;</span><br><span class="line">        <span class="comment">// This function does not return until new USN record created.</span></span><br><span class="line">        <span class="built_in">WaitForNextUsn</span>(read_journal_query.<span class="built_in">get</span>());</span><br><span class="line">        last_usn_ = <span class="built_in">ReadChangesAndNotify</span>(read_journal_query-&gt;StartUsn,</span><br><span class="line">            u_buffer.<span class="built_in">get</span>(),</span><br><span class="line">            file_added_callback_func,</span><br><span class="line">            file_removed_callback_func);</span><br><span class="line">        read_journal_query-&gt;StartUsn = last_usn_;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">delete</span> flag;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>核心的方法就两个，一个WaitForNextUsn，一个ReadChangesAndNotify</p>
+<p>首先来看WaitForNextUsn</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="type">bool</span> <span class="title">NTFSChangesWatcher::WaitForNextUsn</span><span class="params">(PREAD_USN_JOURNAL_DATA read_journal_data)</span> <span class="type">const</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line"></span><br><span class="line">    DWORD bytes_read;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// This function does not return until new USN record created.</span></span><br><span class="line">    <span class="type">const</span> <span class="type">bool</span> ok = <span class="built_in">DeviceIoControl</span>(volume_,</span><br><span class="line">        FSCTL_READ_USN_JOURNAL,</span><br><span class="line">        read_journal_data,</span><br><span class="line">        <span class="built_in">sizeof</span>(*read_journal_data),</span><br><span class="line">        &amp;read_journal_data-&gt;StartUsn,</span><br><span class="line">        <span class="built_in">sizeof</span>(read_journal_data-&gt;StartUsn),</span><br><span class="line">        &amp;bytes_read,</span><br><span class="line">        <span class="literal">nullptr</span>) != <span class="number">0</span>;</span><br><span class="line">    <span class="keyword">return</span> ok;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>通过DeviceIoControl函数，发送FSCTL_READ_USN_JOURNAL事件，由于我们之前初始化的时候设置了从最后一个usn记录开始读取，这时该方法将会阻塞直到用户进行操作，NTFS写入一个新的USN日志。</p>
+<p>这里的最后一个参数lpOverlapped必须为NULL，因为我们要监控文件的变化，需要阻塞函数，如果是异步调用反而会有各种各样的不方便。</p>
+<p>关于DeviceIoControl函数网上已经有很多解释，这里就放个msdn吧。</p>
+<p><a target="_blank" rel="noopener" href="https://learn.microsoft.com/en-us/windows/win32/api/ioapiset/nf-ioapiset-deviceiocontrol">DeviceIoControl function (ioapiset.h) - Win32 apps | Microsoft Learn</a></p>
+<p>以及FSCTL_READ_USN_JOURNAL</p>
+<p><a target="_blank" rel="noopener" href="https://learn.microsoft.com/en-us/windows/win32/api/winioctl/ni-winioctl-fsctl_read_usn_journal">FSCTL_READ_USN_JOURNAL - Win32 apps | Microsoft Learn</a></p>
+<p>当该方法返回后，代表磁盘中出现了一个新的usn记录，这时就会执行到下一个函数</p>
+<p>ReadChangesAndNotify</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br></pre></td><td class="code"><pre><span class="line"><span class="function">USN <span class="title">NTFSChangesWatcher::ReadChangesAndNotify</span><span class="params">(USN low_usn,</span></span></span><br><span class="line"><span class="params"><span class="function">    <span class="type">char</span>* buffer,</span></span></span><br><span class="line"><span class="params"><span class="function">    <span class="type">void</span>(*file_added_callback_func)(<span class="type">const</span> std::u16string&amp;),</span></span></span><br><span class="line"><span class="params"><span class="function">    <span class="type">void</span>(*file_removed_callback_func)(<span class="type">const</span> std::u16string&amp;))</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line"></span><br><span class="line">    DWORD byte_count;</span><br><span class="line"></span><br><span class="line">    <span class="type">const</span> <span class="keyword">auto</span> journal_query = <span class="built_in">GetReadJournalQuery</span>(low_usn);</span><br><span class="line">    <span class="built_in">memset</span>(buffer, <span class="number">0</span>, kBufferSize);</span><br><span class="line">    <span class="keyword">if</span> (!<span class="built_in">ReadJournalRecords</span>(journal_query.<span class="built_in">get</span>(), buffer, byte_count))</span><br><span class="line">    &#123;</span><br><span class="line">        <span class="comment">// An error occurred.</span></span><br><span class="line">        <span class="keyword">return</span> low_usn;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">auto</span> record = <span class="built_in">reinterpret_cast</span>&lt;USN_RECORD*&gt;(<span class="built_in">reinterpret_cast</span>&lt;USN*&gt;(buffer) + <span class="number">1</span>);</span><br><span class="line">    <span class="type">const</span> <span class="keyword">auto</span> record_end = <span class="built_in">reinterpret_cast</span>&lt;USN_RECORD*&gt;(<span class="built_in">reinterpret_cast</span>&lt;BYTE*&gt;(buffer) + byte_count);</span><br><span class="line"></span><br><span class="line">    std::u16string full_path;</span><br><span class="line">    <span class="keyword">for</span> (; record &lt; record_end;</span><br><span class="line">        record = <span class="built_in">reinterpret_cast</span>&lt;USN_RECORD*&gt;(<span class="built_in">reinterpret_cast</span>&lt;BYTE*&gt;(record) + record-&gt;RecordLength)) </span><br><span class="line">    &#123;</span><br><span class="line">        <span class="type">const</span> <span class="keyword">auto</span> reason = record-&gt;Reason;</span><br><span class="line">        full_path.<span class="built_in">clear</span>();</span><br><span class="line">        <span class="comment">// It is really strange, but some system files creating and deleting at the same time.</span></span><br><span class="line">        <span class="keyword">if</span> ((reason &amp; USN_REASON_FILE_CREATE) &amp;&amp; (reason &amp; USN_REASON_FILE_DELETE))</span><br><span class="line">        &#123;</span><br><span class="line">            <span class="keyword">continue</span>;</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="keyword">if</span> ((reason &amp; USN_REASON_FILE_CREATE) &amp;&amp; (reason &amp; USN_REASON_CLOSE)) </span><br><span class="line">        &#123;</span><br><span class="line">            <span class="built_in">showRecord</span>(full_path, record);</span><br><span class="line">            <span class="built_in">file_added_callback_func</span>(full_path);</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="keyword">else</span> <span class="keyword">if</span> ((reason &amp; USN_REASON_FILE_DELETE) &amp;&amp; (reason &amp; USN_REASON_CLOSE)) </span><br><span class="line">        &#123;</span><br><span class="line">            <span class="built_in">showRecord</span>(full_path, record);</span><br><span class="line">            <span class="built_in">file_removed_callback_func</span>(full_path);</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="keyword">else</span> <span class="keyword">if</span> (reason &amp; FILE_CHANGE_BITMASK) </span><br><span class="line">        &#123;</span><br><span class="line">            <span class="keyword">if</span> (reason &amp; USN_REASON_RENAME_OLD_NAME)</span><br><span class="line">            &#123;</span><br><span class="line">                <span class="built_in">showRecord</span>(full_path, record);</span><br><span class="line">                <span class="built_in">file_removed_callback_func</span>(full_path);</span><br><span class="line">            &#125;</span><br><span class="line">            <span class="keyword">else</span> <span class="keyword">if</span> (reason &amp; USN_REASON_RENAME_NEW_NAME)</span><br><span class="line">            &#123;</span><br><span class="line">                <span class="built_in">showRecord</span>(full_path, record);</span><br><span class="line">                <span class="built_in">file_added_callback_func</span>(full_path);</span><br><span class="line">            &#125;</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> *<span class="built_in">reinterpret_cast</span>&lt;USN*&gt;(buffer);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这里ReadJournalRecords将会调用DeviceIoControl函数发送FSCTL_READ_USN_JOURNAL读出新的USN日志记录。</p>
+<p>读取完成后，通过获取USN_RECORD中的reason字段，得到文件是创建，还是被删除。其实还有很多其他的USN_REASON，不过这里由于只需要检测文件变化，因此只监听了</p>
+<ul>
+<li><p>USN_REASON_FILE_CREATE</p>
+</li>
+<li><p>USN_REASON_FILE_DELETE</p>
+</li>
+<li><p>USN_REASON_RENAME_OLD_NAME</p>
+</li>
+<li><p>USN_REASON_RENAME_NEW_NAME</p>
+</li>
+</ul>
+<p>所有的原因可以参考这里</p>
+<p><a target="_blank" rel="noopener" href="https://learn.microsoft.com/en-us/windows/win32/api/winioctl/ns-winioctl-usn_record_v2">USN_RECORD_V2 - Win32 apps | Microsoft Learn</a></p>
+<h3 id="获取文件完整路径"><a href="#获取文件完整路径" class="headerlink" title="获取文件完整路径"></a>获取文件完整路径</h3><p>由于USN日志中记录的只有文件名和文件参照号，因此我们需要通过文件参照号和父文件参照号不断向上查询，拼接出完整的路径。</p>
+<p>也就是上面的showRecord函数，该函数有两个参数，full_path，USN_RECORD指针类型的record，也就是需要拼接出完整路径的文件记录。</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="type">void</span> <span class="title">NTFSChangesWatcher::showRecord</span><span class="params">(std::u16string&amp; full_path, USN_RECORD* record)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="function"><span class="type">static</span> std::wstring <span class="title">sep_wstr</span><span class="params">(<span class="string">L&quot;\\&quot;</span>)</span></span>;</span><br><span class="line">    <span class="function"><span class="type">static</span> std::u16string <span class="title">sep</span><span class="params">(sep_wstr.begin(), sep_wstr.end())</span></span>;</span><br><span class="line"></span><br><span class="line">    <span class="function"><span class="type">const</span> indexer_common::FileInfo <span class="title">file_info</span><span class="params">(*record, drive_letter_)</span></span>;</span><br><span class="line">    <span class="keyword">if</span> (full_path.<span class="built_in">empty</span>())</span><br><span class="line">    &#123;</span><br><span class="line">        full_path += file_info.<span class="built_in">GetName</span>();</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">else</span></span><br><span class="line">    &#123;</span><br><span class="line">        full_path = file_info.<span class="built_in">GetName</span>() + sep + full_path;</span><br><span class="line">    &#125;</span><br><span class="line">    DWORD byte_count = <span class="number">1</span>;</span><br><span class="line">    <span class="keyword">auto</span> buffer = std::<span class="built_in">make_unique</span>&lt;<span class="type">char</span>[]&gt;(kBufferSize);</span><br><span class="line"></span><br><span class="line">    MFT_ENUM_DATA_V0 med;</span><br><span class="line">    med.StartFileReferenceNumber = record-&gt;ParentFileReferenceNumber;</span><br><span class="line">    med.LowUsn = <span class="number">0</span>;</span><br><span class="line">    med.HighUsn = max_usn_;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (!<span class="built_in">DeviceIoControl</span>(volume_,</span><br><span class="line">        FSCTL_ENUM_USN_DATA,</span><br><span class="line">        &amp;med,</span><br><span class="line">        <span class="built_in">sizeof</span>(med),</span><br><span class="line">        buffer.<span class="built_in">get</span>(),</span><br><span class="line">        kBufferSize,</span><br><span class="line">        &amp;byte_count,</span><br><span class="line">        <span class="literal">nullptr</span>))</span><br><span class="line">    &#123;</span><br><span class="line">        <span class="keyword">return</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">auto</span>* parent_record = <span class="built_in">reinterpret_cast</span>&lt;USN_RECORD*&gt;(<span class="built_in">reinterpret_cast</span>&lt;USN*&gt;(buffer.<span class="built_in">get</span>()) + <span class="number">1</span>);</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (parent_record-&gt;FileReferenceNumber != record-&gt;ParentFileReferenceNumber)</span><br><span class="line">    &#123;</span><br><span class="line">        <span class="function"><span class="type">static</span> std::wstring <span class="title">colon_wstr</span><span class="params">(<span class="string">L&quot;:&quot;</span>)</span></span>;</span><br><span class="line">        <span class="function"><span class="type">static</span> std::u16string <span class="title">colon</span><span class="params">(colon_wstr.begin(), colon_wstr.end())</span></span>;</span><br><span class="line">        std::string drive;</span><br><span class="line">        drive += drive_letter_;</span><br><span class="line">        <span class="keyword">auto</span>&amp;&amp; w_drive = <span class="built_in">string2wstring</span>(drive);</span><br><span class="line">        <span class="function"><span class="type">const</span> std::u16string <span class="title">drive_u16</span><span class="params">(w_drive.begin(), w_drive.end())</span></span>;</span><br><span class="line">        full_path = drive_u16 + colon + sep + full_path;</span><br><span class="line">        <span class="keyword">return</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="built_in">showRecord</span>(full_path, parent_record);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>首先获得文件名和父文件参照号，然后定义一个MFT_ENUM_DATA，由于MFT_ENUM_DATA_V1会报错Error 87，也就是<strong>ERROR_INVALID_PARAMETER</strong>，所以这里改成了MFT_ENUM_DATA_V0</p>
+<p><a target="_blank" rel="noopener" href="https://learn.microsoft.com/en-us/windows/win32/debug/system-error-codes--0-499-">System Error Codes (0-499) (WinError.h) - Win32 apps | Microsoft Learn</a></p>
+<p>将开始查询地址设置为record-&gt;ParentFileReferenceNumber，并将上界设置为最开始初始化的max_usn_。</p>
+<p>然后调用DeviceIoControl，发送FSCTL_ENUM_USN_DATA事件，就可以读取出record的父文件夹的USN记录。</p>
+<p>这时，将查询出的父文件夹记录再作为record进行递归查询。</p>
+<p>不断向上查询，将文件名拼接到full_path中，最后找到顶层退出递归即可。</p>
+<p>获得文件完整路径后，即可调用两个回调函数进行处理了。</p>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2023/03/18/GPU-Memory/" rel="prev" title="对显存占用的监控（Windows系统）">
+      <i class="fa fa-chevron-left"></i> 对显存占用的监控（Windows系统）
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/2023/03/31/hello-world/" rel="next" title="Hello World">
+      Hello World <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          文章目录
+        </li>
+        <li class="sidebar-nav-overview">
+          站点概览
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#%E9%80%9A%E8%BF%87USN%E6%97%A5%E5%BF%97%E8%BF%9B%E8%A1%8C%E6%96%87%E4%BB%B6%E7%9B%91%E6%8E%A7"><span class="nav-number">1.</span> <span class="nav-text">通过USN日志进行文件监控</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%8E%9F%E7%90%86"><span class="nav-number">1.1.</span> <span class="nav-text">原理</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%AE%9E%E7%8E%B0"><span class="nav-number">1.2.</span> <span class="nav-text">实现</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%AE%9A%E4%B9%89%E7%9B%91%E6%8E%A7%E7%B1%BB"><span class="nav-number">1.2.1.</span> <span class="nav-text">定义监控类</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%88%9D%E5%A7%8B%E5%8C%96USN%E6%97%A5%E5%BF%97"><span class="nav-number">1.2.2.</span> <span class="nav-text">初始化USN日志</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%BC%80%E5%A7%8B%E7%9B%91%E6%8E%A7"><span class="nav-number">1.2.3.</span> <span class="nav-text">开始监控</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E8%8E%B7%E5%8F%96%E6%96%87%E4%BB%B6%E5%AE%8C%E6%95%B4%E8%B7%AF%E5%BE%84"><span class="nav-number">1.2.4.</span> <span class="nav-text">获取文件完整路径</span></a></li></ol></li></ol></li></ol></div>
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="xuanxu"
+      src="https://i.imgtg.com/2023/03/22/9GMCK.jpg">
+  <p class="site-author-name" itemprop="name">xuanxu</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">9</span>
+          <span class="site-state-item-name">日志</span>
+        </a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2023</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">xuanxu</span>
+</div>
+  <div class="powered-by">由 <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://pisces.theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Pisces</a> 强力驱动
+  </div>
+
+        
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+</body>
+</html>

@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.4.2">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"example.com","root":"/","scheme":"Pisces","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":false,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="同步与线程安全线程安全可以说是Java里老生常谈的问题了，包括Java的synchronize，Lock，以及他们的一些基本原理，monitor enter，monitor exit，和Java的AQS框架。 volatile被称为轻量级的线程同步工具。下面就来看一下volatile关键字的用法以及到底有什么作用。 单例模式最常见的volatile的用法当然是单例模式的双重检验锁了 1234567">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Java volatile关键字以及线程安全">
+<meta property="og:url" content="http://example.com/2022/07/22/jvm-volatile/index.html">
+<meta property="og:site_name" content="Hexo">
+<meta property="og:description" content="同步与线程安全线程安全可以说是Java里老生常谈的问题了，包括Java的synchronize，Lock，以及他们的一些基本原理，monitor enter，monitor exit，和Java的AQS框架。 volatile被称为轻量级的线程同步工具。下面就来看一下volatile关键字的用法以及到底有什么作用。 单例模式最常见的volatile的用法当然是单例模式的双重检验锁了 1234567">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://i.328888.xyz/2023/03/30/iCEOtZ.jpeg">
+<meta property="article:published_time" content="2022-07-21T23:22:22.000Z">
+<meta property="article:modified_time" content="2023-03-30T11:20:04.000Z">
+<meta property="article:author" content="xuanxu">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://i.328888.xyz/2023/03/30/iCEOtZ.jpeg">
+
+<link rel="canonical" href="http://example.com/2022/07/22/jvm-volatile/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh-CN'
+  };
+</script>
+
+  <title>Java volatile关键字以及线程安全 | Hexo</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="切换导航栏">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">Hexo</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>首页</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>归档</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2022/07/22/jvm-volatile/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="https://i.imgtg.com/2023/03/22/9GMCK.jpg">
+      <meta itemprop="name" content="xuanxu">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Hexo">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          Java volatile关键字以及线程安全
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">发表于</span>
+
+              <time title="创建时间：2022-07-22 07:22:22" itemprop="dateCreated datePublished" datetime="2022-07-22T07:22:22+08:00">2022-07-22</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">更新于</span>
+                <time title="修改时间：2023-03-30 19:20:04" itemprop="dateModified" datetime="2023-03-30T19:20:04+08:00">2023-03-30</time>
+              </span>
+
+          
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <h1 id="同步与线程安全"><a href="#同步与线程安全" class="headerlink" title="同步与线程安全"></a>同步与线程安全</h1><p>线程安全可以说是Java里老生常谈的问题了，包括Java的synchronize，Lock，以及他们的一些基本原理，monitor enter，monitor exit，和Java的AQS框架。</p>
+<p>volatile被称为轻量级的线程同步工具。下面就来看一下volatile关键字的用法以及到底有什么作用。</p>
+<h2 id="单例模式"><a href="#单例模式" class="headerlink" title="单例模式"></a>单例模式</h2><p>最常见的volatile的用法当然是单例模式的双重检验锁了</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="keyword">class</span> <span class="title class_">Singleton</span> &#123;  </span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">volatile</span> <span class="keyword">static</span> Singleton singleton;  </span><br><span class="line">    <span class="keyword">private</span> <span class="title function_">Singleton</span> <span class="params">()</span>&#123;&#125;  </span><br><span class="line">    <span class="keyword">public</span> <span class="keyword">static</span> Singleton <span class="title function_">getSingleton</span><span class="params">()</span> &#123;  </span><br><span class="line">        <span class="keyword">if</span> (singleton == <span class="literal">null</span>) &#123;  </span><br><span class="line">            <span class="keyword">synchronized</span> (Singleton.class) &#123;  </span><br><span class="line">                <span class="keyword">if</span> (singleton == <span class="literal">null</span>) &#123;  </span><br><span class="line">                    singleton = <span class="keyword">new</span> <span class="title class_">Singleton</span>();  </span><br><span class="line">                &#125;  </span><br><span class="line">            &#125;  </span><br><span class="line">        &#125;  </span><br><span class="line">        <span class="keyword">return</span> singleton;  </span><br><span class="line">    &#125;  </span><br><span class="line">&#125;  </span><br></pre></td></tr></table></figure>
+
+<p>双重检验锁，顾名思义，需要判断两次null。</p>
+<p>第一次判断是null了之后，进入synchronize代码块，随后再次判断，如果仍然是null，那么创建对象，然后赋值给singleton，最后返回。这是一个线程安全的单例模式。</p>
+<p>那么为什么要判断两次呢。</p>
+<p>因为如果只判断一次就进入同步代码块，线程一进入同步代码块之后就被切换到线程二，线程二此时判断仍然是null，因此会开始等待线程一退出同步代码块。当线程一创建对象退出后之后，线程二进入，仍然会创建一个新的对象，此时就出现了两个对象。</p>
+<p>但是为什么需要加上volatile才真正的线程安全呢。</p>
+<p>这就是volatile的第一个功能，禁止代码重排序。</p>
+<h2 id="禁止代码重排序"><a href="#禁止代码重排序" class="headerlink" title="禁止代码重排序"></a>禁止代码重排序</h2><p>代码重排序出现有很多原因，编译器优化可能导致指令被重排，现代CPU的流水线设计，乱序执行也已经是非常普遍的功能。</p>
+<p>new操作本质是分为三步的，首先分配内存空间，然后再将对象初始化，最后让变量指向那个内存空间。</p>
+<p>在Java字节码中也有所体现。</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="keyword">class</span> <span class="title class_">Test</span> &#123;</span><br><span class="line">    <span class="keyword">public</span> <span class="keyword">void</span> <span class="title function_">test</span><span class="params">()</span> &#123;</span><br><span class="line">        <span class="type">var</span> <span class="variable">testObj</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">Test</span>();</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这一段简单的代码，字节码为</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br></pre></td><td class="code"><pre><span class="line">// class version 61.0 (61)</span><br><span class="line">// access flags 0x21</span><br><span class="line">public class Test &#123;</span><br><span class="line"></span><br><span class="line">  // compiled from: Test.java</span><br><span class="line"></span><br><span class="line">  // access flags 0x1</span><br><span class="line">  public &lt;init&gt;()V</span><br><span class="line">   L0</span><br><span class="line">    LINENUMBER 1 L0</span><br><span class="line">    ALOAD 0</span><br><span class="line">    INVOKESPECIAL java/lang/Object.&lt;init&gt; ()V</span><br><span class="line">    RETURN</span><br><span class="line">   L1</span><br><span class="line">    LOCALVARIABLE this LTest; L0 L1 0</span><br><span class="line">    MAXSTACK = 1</span><br><span class="line">    MAXLOCALS = 1</span><br><span class="line"></span><br><span class="line">  // access flags 0x1</span><br><span class="line">  public <span class="built_in">test</span>()V</span><br><span class="line">   L0</span><br><span class="line">    LINENUMBER 3 L0</span><br><span class="line">    NEW Test</span><br><span class="line">    DUP</span><br><span class="line">    INVOKESPECIAL Test.&lt;init&gt; ()V</span><br><span class="line">    ASTORE 1</span><br><span class="line">   L1</span><br><span class="line">    LINENUMBER 4 L1</span><br><span class="line">    RETURN</span><br><span class="line">   L2</span><br><span class="line">    LOCALVARIABLE this LTest; L0 L2 0</span><br><span class="line">    LOCALVARIABLE testObj LTest; L1 L2 1</span><br><span class="line">    MAXSTACK = 2</span><br><span class="line">    MAXLOCALS = 2</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>可以看到，这里首先调用了NEW字节码，获得了对象的一个引用，然后调用DUP字节码，将操作数栈顶复制并入栈，这时操作数栈有两个该对象的引用。然后弹出一个引用，并调用<init>方法初始化实例，也就是构造函数以及代码块进行初始化，最后再调用ASTORE将引用赋值到局部变量testObj。</p>
+<p>因此，在这里如果不使用volatile关键字，可能会导致赋值引用和初始化实例被重排序，如果第一个线程创建对象之后没有初始化就发生了线程切换，第二个线程在第一个判断中已经不为null，使用该对象时就可能出现问题。</p>
+<p>关于volatile如何实现禁止指令重排，这里就不得不提到Java的happens-before原则。网上已经有了很多的资料，这里贴上一篇自认为讲的很不错的文章。</p>
+<p><a target="_blank" rel="noopener" href="https://tech.meituan.com/2014/09/23/java-memory-reordering.html">Java内存访问重排序的研究 - 美团技术团队 (meituan.com)</a></p>
+<p>简单来说，禁止指令重排是通过内存屏障来实现。</p>
+<p>在Java中定义了4中内存屏障，分别是</p>
+<ul>
+<li><p>LoadLoad屏障：对于这样的语句Load1; LoadLoad; Load2，在Load2及后续读取操作要读取的数据被访问前，保证Load1要读取的数据被读取完毕。</p>
+</li>
+<li><p>StoreStore屏障：对于这样的语句Store1; StoreStore; Store2，在Store2及后续写入操作执行前，保证Store1的写入操作对其它处理器可见。</p>
+</li>
+<li><p>LoadStore屏障：对于这样的语句Load1; LoadStore; Store2，在Store2及后续写入操作被刷出前，保证Load1要读取的数据被读取完毕。</p>
+</li>
+<li><p>StoreLoad屏障：对于这样的语句Store1; StoreLoad; Load2，在Load2及后续所有读取操作执行前，保证Store1的写入对所有处理器可见。它的开销是四种屏障中最大的。在大多数处理器的实现中，这个屏障是个万能屏障，兼具其它三种内存屏障的功能。</p>
+</li>
+</ul>
+<p><a target="_blank" rel="noopener" href="https://github.com/openjdk/jdk/blob/master/src/hotspot/os_cpu/linux_x86/orderAccess_linux_x86.hpp#L40">jdk/orderAccess_linux_x86.hpp at master · openjdk/jdk (github.com)</a></p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">inline</span> <span class="type">void</span> <span class="title">OrderAccess::loadload</span><span class="params">()</span>   </span>&#123; <span class="built_in">compiler_barrier</span>(); &#125;</span><br><span class="line"><span class="function"><span class="keyword">inline</span> <span class="type">void</span> <span class="title">OrderAccess::storestore</span><span class="params">()</span> </span>&#123; <span class="built_in">compiler_barrier</span>(); &#125;</span><br><span class="line"><span class="function"><span class="keyword">inline</span> <span class="type">void</span> <span class="title">OrderAccess::loadstore</span><span class="params">()</span>  </span>&#123; <span class="built_in">compiler_barrier</span>(); &#125;</span><br><span class="line"><span class="function"><span class="keyword">inline</span> <span class="type">void</span> <span class="title">OrderAccess::storeload</span><span class="params">()</span>  </span>&#123; <span class="built_in">fence</span>();            &#125;</span><br></pre></td></tr></table></figure>
+
+<p>至于为什么storeload是fence()而其他的是compiler_barrier()，就和x86平台的invalidate queue和store buffer有关了，又会牵扯到MESI缓存一致性协议，这里就不展开了。</p>
+<p>当上面单例模式加上volatile之后，变量的初始化和引用赋值将会被禁止重排序，这时就不会再发生上文所说的使用到未初始化完成的对象的问题了。</p>
+<p>上面的文章中提到了通过Unsafe. putOrderedObject来对volatile进行优化。</p>
+<p>重点的就是下面的代码</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">    <span class="keyword">public</span> <span class="keyword">void</span> <span class="title function_">create</span><span class="params">()</span> &#123;</span><br><span class="line">    <span class="type">SomeThing</span> <span class="variable">temp</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">SomeThing</span>();</span><br><span class="line">    unsafe.putOrderedObject(<span class="built_in">this</span>, valueOffset, <span class="literal">null</span>);    <span class="comment">//将value赋null值只是一项无用操作，实际利用的是这条语句的内存屏障</span></span><br><span class="line">    object = temp;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>当调用unsafe.putOrderedObject之后，上面的new操作和下面的object = temp之间就隔了一个StoreStore内存屏障，这时就不会出现new未初始化完成就赋值的问题了。</p>
+<p>还有一种利用局部变量来减轻volatile影响的优化方案，在Spring中的单例模式中有很好地体现。</p>
+<p><a target="_blank" rel="noopener" href="https://github.com/spring-projects/spring-framework/blob/main/spring-beans/src/main/java/org/springframework/beans/factory/support/DefaultSingletonBeanRegistry.java">spring-framework/DefaultSingletonBeanRegistry.java at main · spring-projects/spring-framework (github.com)</a></p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">@Nullable</span></span><br><span class="line"><span class="keyword">protected</span> Object <span class="title function_">getSingleton</span><span class="params">(String beanName, <span class="type">boolean</span> allowEarlyReference)</span> &#123;</span><br><span class="line">    <span class="comment">// Quick check for existing instance without full singleton lock</span></span><br><span class="line">    <span class="type">Object</span> <span class="variable">singletonObject</span> <span class="operator">=</span> <span class="built_in">this</span>.singletonObjects.get(beanName);</span><br><span class="line">    <span class="keyword">if</span> (singletonObject == <span class="literal">null</span> &amp;&amp; isSingletonCurrentlyInCreation(beanName)) &#123;</span><br><span class="line">        singletonObject = <span class="built_in">this</span>.earlySingletonObjects.get(beanName);</span><br><span class="line">        <span class="keyword">if</span> (singletonObject == <span class="literal">null</span> &amp;&amp; allowEarlyReference) &#123;</span><br><span class="line">            <span class="keyword">synchronized</span> (<span class="built_in">this</span>.singletonObjects) &#123;</span><br><span class="line">                <span class="comment">// Consistent creation of early reference within full singleton lock</span></span><br><span class="line">                singletonObject = <span class="built_in">this</span>.singletonObjects.get(beanName);</span><br><span class="line">                <span class="keyword">if</span> (singletonObject == <span class="literal">null</span>) &#123;</span><br><span class="line">                    singletonObject = <span class="built_in">this</span>.earlySingletonObjects.get(beanName);</span><br><span class="line">                    <span class="keyword">if</span> (singletonObject == <span class="literal">null</span>) &#123;</span><br><span class="line">                        ObjectFactory&lt;?&gt; singletonFactory = <span class="built_in">this</span>.singletonFactories.get(beanName);</span><br><span class="line">                        <span class="keyword">if</span> (singletonFactory != <span class="literal">null</span>) &#123;</span><br><span class="line">                            singletonObject = singletonFactory.getObject();</span><br><span class="line">                            <span class="built_in">this</span>.earlySingletonObjects.put(beanName, singletonObject);</span><br><span class="line">                            <span class="built_in">this</span>.singletonFactories.remove(beanName);</span><br><span class="line">                        &#125;</span><br><span class="line">                    &#125;</span><br><span class="line">                &#125;</span><br><span class="line">            &#125;</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> singletonObject;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这里利用了一个singletonObject来当做局部变量，这时在代码中进行创建的时候就不会因为外部变量的volatile而导致代码中频繁出现内存屏障，提高了性能。</p>
+<h2 id="内存可见性"><a href="#内存可见性" class="headerlink" title="内存可见性"></a>内存可见性</h2><p>接下来看另外一个例子。</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">import</span> java.util.concurrent.TimeUnit;</span><br><span class="line"></span><br><span class="line"><span class="keyword">public</span> <span class="keyword">class</span> <span class="title class_">Test</span> &#123;</span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">static</span> <span class="type">boolean</span> <span class="variable">flag</span> <span class="operator">=</span> <span class="literal">true</span>;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">void</span> <span class="title function_">main</span><span class="params">(String[] args)</span> &#123;</span><br><span class="line"></span><br><span class="line">        <span class="keyword">new</span> <span class="title class_">Thread</span>(() -&gt; &#123;</span><br><span class="line">            System.out.println(<span class="string">&quot;进入循环&quot;</span>);</span><br><span class="line">            <span class="keyword">while</span> (flag) &#123;</span><br><span class="line"></span><br><span class="line">            &#125;</span><br><span class="line">            System.out.println(<span class="string">&quot;退出循环&quot;</span>);</span><br><span class="line">        &#125;).start();</span><br><span class="line"></span><br><span class="line">        <span class="keyword">new</span> <span class="title class_">Thread</span>(() -&gt; &#123;</span><br><span class="line">            <span class="keyword">try</span> &#123;</span><br><span class="line">                TimeUnit.SECONDS.sleep(<span class="number">1</span>);</span><br><span class="line">            &#125; <span class="keyword">catch</span> (InterruptedException e) &#123;</span><br><span class="line">                <span class="keyword">throw</span> <span class="keyword">new</span> <span class="title class_">RuntimeException</span>(e);</span><br><span class="line">            &#125;</span><br><span class="line">            flag = <span class="literal">false</span>;</span><br><span class="line">            System.out.println(<span class="string">&quot;已经将flag设置为false&quot;</span>);</span><br><span class="line">        &#125;).start();</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>在这段代码中，理论上应该当第二个线程睡眠1秒后，将flag设置为false，第一个线程就应该退出循环。</p>
+<p>但是第一个线程却没有退出。</p>
+<p><img src="https://i.328888.xyz/2023/03/30/iCEOtZ.jpeg" alt="iCEOtZ.jpeg"></p>
+<p>这里就需要提到Java的内存模型，也就是JMM（Java Memory Model）。</p>
+<p>关于JMM，这里也有一篇文章讲的比较好。</p>
+<p><a target="_blank" rel="noopener" href="https://zhuanlan.zhihu.com/p/29881777">Java内存模型（JMM）总结 - 知乎 (zhihu.com)</a></p>
+<p>JMM规定，所有的变量都存储在主内存中，每一个线程都有一个私有的本地内存，线程对变量的操作必须在本地内存中进行。</p>
+<p>因此上面的代码中，由于线程一将flag进行了缓存，被JIT优化之后，就只会读取寄存器中的值，因此不会退出循环。</p>
+<p>加上volatile之后，每次读取都会从主存中刷新，就不会再出现这样的问题了。</p>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2022/05/28/java-generic/" rel="prev" title="Java泛型">
+      <i class="fa fa-chevron-left"></i> Java泛型
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/2022/08/16/Everything/" rel="next" title="Everything高速搜索文件原理及实现">
+      Everything高速搜索文件原理及实现 <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          文章目录
+        </li>
+        <li class="sidebar-nav-overview">
+          站点概览
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#%E5%90%8C%E6%AD%A5%E4%B8%8E%E7%BA%BF%E7%A8%8B%E5%AE%89%E5%85%A8"><span class="nav-number">1.</span> <span class="nav-text">同步与线程安全</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%8D%95%E4%BE%8B%E6%A8%A1%E5%BC%8F"><span class="nav-number">1.1.</span> <span class="nav-text">单例模式</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%A6%81%E6%AD%A2%E4%BB%A3%E7%A0%81%E9%87%8D%E6%8E%92%E5%BA%8F"><span class="nav-number">1.2.</span> <span class="nav-text">禁止代码重排序</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%86%85%E5%AD%98%E5%8F%AF%E8%A7%81%E6%80%A7"><span class="nav-number">1.3.</span> <span class="nav-text">内存可见性</span></a></li></ol></li></ol></div>
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="xuanxu"
+      src="https://i.imgtg.com/2023/03/22/9GMCK.jpg">
+  <p class="site-author-name" itemprop="name">xuanxu</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">9</span>
+          <span class="site-state-item-name">日志</span>
+        </a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2023</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">xuanxu</span>
+</div>
+  <div class="powered-by">由 <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://pisces.theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Pisces</a> 强力驱动
+  </div>
+
+        
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+</body>
+</html>

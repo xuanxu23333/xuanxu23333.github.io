@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.4.2">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"example.com","root":"/","scheme":"Pisces","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":false,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="泛型概述泛型是现代编程语言中的重要特性，简单来说就是不必指定类型，可以写出非特定类型，模板化的代码，提高代码重用率。 泛型应用最广的地方应该就是容器类了。在Java的容器类中大量的使用了泛型。 例如ArrayList 12345678910111213141516171819202122232425262728293031323334353637public class ArrayList&lt;">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Java泛型">
+<meta property="og:url" content="http://example.com/2022/05/28/java-generic/index.html">
+<meta property="og:site_name" content="Hexo">
+<meta property="og:description" content="泛型概述泛型是现代编程语言中的重要特性，简单来说就是不必指定类型，可以写出非特定类型，模板化的代码，提高代码重用率。 泛型应用最广的地方应该就是容器类了。在Java的容器类中大量的使用了泛型。 例如ArrayList 12345678910111213141516171819202122232425262728293031323334353637public class ArrayList&lt;">
+<meta property="og:locale" content="zh_CN">
+<meta property="article:published_time" content="2022-05-27T18:32:48.000Z">
+<meta property="article:modified_time" content="2023-03-28T05:49:05.000Z">
+<meta property="article:author" content="xuanxu">
+<meta name="twitter:card" content="summary">
+
+<link rel="canonical" href="http://example.com/2022/05/28/java-generic/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh-CN'
+  };
+</script>
+
+  <title>Java泛型 | Hexo</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="切换导航栏">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">Hexo</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>首页</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>归档</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2022/05/28/java-generic/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="https://i.imgtg.com/2023/03/22/9GMCK.jpg">
+      <meta itemprop="name" content="xuanxu">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Hexo">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          Java泛型
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">发表于</span>
+
+              <time title="创建时间：2022-05-28 02:32:48" itemprop="dateCreated datePublished" datetime="2022-05-28T02:32:48+08:00">2022-05-28</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">更新于</span>
+                <time title="修改时间：2023-03-28 13:49:05" itemprop="dateModified" datetime="2023-03-28T13:49:05+08:00">2023-03-28</time>
+              </span>
+
+          
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <h1 id="泛型概述"><a href="#泛型概述" class="headerlink" title="泛型概述"></a>泛型概述</h1><p>泛型是现代编程语言中的重要特性，简单来说就是不必指定类型，可以写出非特定类型，模板化的代码，提高代码重用率。</p>
+<p>泛型应用最广的地方应该就是容器类了。在Java的容器类中大量的使用了泛型。</p>
+<p>例如ArrayList</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="keyword">class</span> <span class="title class_">ArrayList</span>&lt;E&gt; <span class="keyword">extends</span> <span class="title class_">AbstractList</span>&lt;E&gt;</span><br><span class="line">        <span class="keyword">implements</span> <span class="title class_">List</span>&lt;E&gt;, RandomAccess, Cloneable, java.io.Serializable</span><br><span class="line">&#123;</span><br><span class="line">    <span class="meta">@java</span>.io.Serial</span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">static</span> <span class="keyword">final</span> <span class="type">long</span> <span class="variable">serialVersionUID</span> <span class="operator">=</span> <span class="number">8683452581122892189L</span>;</span><br><span class="line"></span><br><span class="line">    <span class="comment">/**</span></span><br><span class="line"><span class="comment">     * Default initial capacity.</span></span><br><span class="line"><span class="comment">     */</span></span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">static</span> <span class="keyword">final</span> <span class="type">int</span> <span class="variable">DEFAULT_CAPACITY</span> <span class="operator">=</span> <span class="number">10</span>;</span><br><span class="line"></span><br><span class="line">    <span class="comment">/**</span></span><br><span class="line"><span class="comment">     * Shared empty array instance used for empty instances.</span></span><br><span class="line"><span class="comment">     */</span></span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">static</span> <span class="keyword">final</span> Object[] EMPTY_ELEMENTDATA = &#123;&#125;;</span><br><span class="line"></span><br><span class="line">    <span class="comment">/**</span></span><br><span class="line"><span class="comment">     * Shared empty array instance used for default sized empty instances. We</span></span><br><span class="line"><span class="comment">     * distinguish this from EMPTY_ELEMENTDATA to know how much to inflate when</span></span><br><span class="line"><span class="comment">     * first element is added.</span></span><br><span class="line"><span class="comment">     */</span></span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">static</span> <span class="keyword">final</span> Object[] DEFAULTCAPACITY_EMPTY_ELEMENTDATA = &#123;&#125;;</span><br><span class="line"></span><br><span class="line">    <span class="comment">/**</span></span><br><span class="line"><span class="comment">     * The array buffer into which the elements of the ArrayList are stored.</span></span><br><span class="line"><span class="comment">     * The capacity of the ArrayList is the length of this array buffer. Any</span></span><br><span class="line"><span class="comment">     * empty ArrayList with elementData == DEFAULTCAPACITY_EMPTY_ELEMENTDATA</span></span><br><span class="line"><span class="comment">     * will be expanded to DEFAULT_CAPACITY when the first element is added.</span></span><br><span class="line"><span class="comment">     */</span></span><br><span class="line">    <span class="keyword">transient</span> Object[] elementData; <span class="comment">// non-private to simplify nested class access</span></span><br><span class="line"></span><br><span class="line">    <span class="comment">/**</span></span><br><span class="line"><span class="comment">     * The size of the ArrayList (the number of elements it contains).</span></span><br><span class="line"><span class="comment">     *</span></span><br><span class="line"><span class="comment">     * <span class="doctag">@serial</span></span></span><br><span class="line"><span class="comment">     */</span></span><br><span class="line">    <span class="keyword">private</span> <span class="type">int</span> size;</span><br></pre></td></tr></table></figure>
+
+<p>可以看到ArrayList存放数据本质就是一个Object数组elementData，因此，如果不使用泛型，直接存储Object。比如将String类型放入容器，那么在get函数取出元素时类型为Object，这时候就需要强制转换。</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="type">ArrayList</span> <span class="variable">list</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">ArrayList</span>();</span><br><span class="line">list.add(<span class="string">&quot;test&quot;</span>);</span><br><span class="line"><span class="type">String</span> <span class="variable">str</span> <span class="operator">=</span> (String) list.get(<span class="number">0</span>);</span><br></pre></td></tr></table></figure>
+
+<p>如何这个容器中还存在其他类型的元素，那么取出元素时就很容易出现ClassCastException异常。</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">list.add(<span class="number">123</span>);</span><br><span class="line">str = (String) list.get(<span class="number">1</span>);</span><br></pre></td></tr></table></figure>
+
+<p>当然，如果只写一个专门存储String或者Integer的ArrayList也可以，但是这样就需要给每一个类型都写单独编写，更别提还有自己写的类。</p>
+<p>因此，泛型就出现了，泛型类可以在编译阶段就检查类型，这样就不会导致类型转换的异常。</p>
+<p>下面是一个最简单的泛型类</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="keyword">class</span> <span class="title class_">Generic</span>&lt;T&gt;&#123; </span><br><span class="line">    <span class="keyword">private</span> T val;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">public</span> <span class="title function_">Generic</span><span class="params">(T val)</span> &#123;</span><br><span class="line">        <span class="built_in">this</span>.val = val;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">public</span> T <span class="title function_">getVal</span><span class="params">()</span>&#123;</span><br><span class="line">        <span class="keyword">return</span> val;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h1 id="泛型擦除"><a href="#泛型擦除" class="headerlink" title="泛型擦除"></a>泛型擦除</h1><p><strong>泛型擦除</strong>是指Java中的泛型只在编译期有效，在运行期间会被删除。</p>
+<p>如下面这段代码</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="keyword">class</span> <span class="title class_">Foo</span> &#123;  </span><br><span class="line">    <span class="keyword">public</span> <span class="keyword">void</span> <span class="title function_">test</span><span class="params">(List&lt;String&gt; stringList)</span>&#123;  </span><br><span class="line"></span><br><span class="line">    &#125;  </span><br><span class="line">    <span class="keyword">public</span> <span class="keyword">void</span> <span class="title function_">test</span><span class="params">(List&lt;Integer&gt; integerList)</span> &#123;  </span><br><span class="line"></span><br><span class="line">    &#125;  </span><br><span class="line">&#125;  </span><br></pre></td></tr></table></figure>
+
+<p>这段代码会报错，方法不能重载，原因就是上面两个方法，在编译后被泛型擦除，最后都是</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="keyword">void</span> <span class="title function_">test</span><span class="params">(List)</span> &#123;&#125;</span><br></pre></td></tr></table></figure>
+
+<p>因此不能区分两个函数。</p>
+<h2 id="泛型类的继承"><a href="#泛型类的继承" class="headerlink" title="泛型类的继承"></a>泛型类的继承</h2><p>泛型类的继承关系不是由泛型类型决定的，如List<Integer>和List<Number>，虽然Integer继承自Number，但是List<Integer>和List<Number>并没有继承关系。</p>
+<p>要想使两个泛型类具有继承关系，只能使两个泛型类本身之间继承，或实现接口。</p>
+<p>如上面的ArrayList就继承了AbstractList<E>以及List<E>接口。</p>
+<h1 id="泛型的逆变和协变"><a href="#泛型的逆变和协变" class="headerlink" title="泛型的逆变和协变"></a>泛型的逆变和协变</h1><p>先从一个数组说起，Java的数组是协变的。</p>
+<p>看下面这段代码</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="keyword">class</span> <span class="title class_">Test</span> &#123;</span><br><span class="line">    <span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">void</span> <span class="title function_">main</span><span class="params">(String[] args)</span> &#123;</span><br><span class="line">        Number[] arr = <span class="keyword">new</span> <span class="title class_">Integer</span>[<span class="number">2</span>];</span><br><span class="line">        arr[<span class="number">0</span>] = <span class="number">1</span>;</span><br><span class="line">        arr[<span class="number">1</span>] = <span class="number">0.5</span>;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这段代码在编译器并不会出错，但是一旦运行，将会抛出一个异常</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">Exception in thread &quot;main&quot; java.lang.ArrayStoreException: java.lang.Double</span><br><span class="line">    at Test.main(Test.java:5)</span><br></pre></td></tr></table></figure>
+
+<p>这是因为Integer是Number的子类型，因此Integer[]也是Number[]的子类型，这样的性质被称为协变，在编译器并没有检查出错误。</p>
+<p>但是在运行时，jvm虚拟机发现这个arr其实是一个Integer类型的数组，不是Number类型，所以不能存放进入double类型的数字，因此抛出了一个异常。</p>
+<h2 id="泛型的不变性"><a href="#泛型的不变性" class="headerlink" title="泛型的不变性"></a>泛型的不变性</h2><p>因此，在吸取了上面的教训之后，泛型被设计为不变，也就是说，List<Integer>并不是List<Number>的子类型。</p>
+<p>这样在编译器就可以检查出错误，防止运行期再报错。</p>
+<p>但是这样就引入一个新的问题，如何才能实现协变呢。</p>
+<p>协变在Java中还是很常用的，比如我只想要一个Fruit集合，里面存放着水果，但我不想管里面到底存放的是哪种水果。</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="keyword">void</span> <span class="title function_">consume</span><span class="params">(List&lt;Fruit&gt; list)</span> &#123;</span><br><span class="line">    ......</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这时，泛型的不变性就带来了麻烦，加入我现在有一个List<Apple>，因为List<Fruit>并不是List<Apple>的父类型，参数就传递不进去。</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">List&lt;Apple&gt; appleList = <span class="keyword">new</span> <span class="title class_">ArrayList</span>&lt;Apple&gt;;</span><br><span class="line">consume(appleList); <span class="comment">// 报错</span></span><br></pre></td></tr></table></figure>
+
+<p>因此，在泛型中如何实现协变就成为了一个问题。</p>
+<p>还有一种情况，如果我们希望往List<Object>中放水果，使用一个produce函数将所有List<Apple>或者List<Banana>的元素全部添加到List<Object>，但又希望在produce函数中向容器添加非Fruit的其他元素时进行检查并报错，这时候就需要逆变。</p>
+<h3 id="泛型通配符"><a href="#泛型通配符" class="headerlink" title="泛型通配符"></a>泛型通配符</h3><p>要实现泛型协变和逆变，这时通配符 ? 就派上用场了。</p>
+<ul>
+<li><code>&lt;? extends&gt;</code>实现了泛型的协变</li>
+<li><code>&lt;? super&gt;</code>实现了泛型的逆变</li>
+</ul>
+<p>在上面的代码中，假如在consume函数中我们想传入参数，就需要把List<Fruit>改为List&lt;? extends Fruit&gt;。这样就不会产生报错了。</p>
+<p>List&lt;? extends Fruit&gt;，其中&lt;? extends Fruit&gt;代表的类型为：Fruit及其子类型，此时传入List<Apple>就没有问题了。</p>
+<p>但是当List<Apple>协变为List&lt;? extends Fruit&gt;之后，就不能往容器中再放入元素了。</p>
+<p>原因在于，当容器协变后，List&lt;? extends Fruit&gt;中的类型不能再被确定为Apple，&lt;? extends Fruit&gt;虽然包含Apple，但是并不特指为Apple。因此，如果放入一个其他的类型，比如Banana，那么在使用上一个List<Apple>进行读取的时候就会出现类型转换错误。</p>
+<p>同样的，如果希望往Fruit中放水果，就可以使用&lt;? super Fruit&gt;让List<Object>逆变为List&lt;? super Fruit&gt;，这样在函数中就可以调用add方法。</p>
+<p>从上面的例子可以看出，<code>extends</code>确定了泛型的上界，而<code>super</code>确定了泛型的下界。</p>
+<h1 id="PECS"><a href="#PECS" class="headerlink" title="PECS"></a>PECS</h1><p>究竟什么时候使用extends，什么时候使用super。也就是PECS</p>
+<blockquote>
+<p>PECS: producer-extends, consumer-super.</p>
+</blockquote>
+<p>生产者使用extends，因为协变只可读取，不可写入。消费者使用super，因为super写入可以保证类型检查。</p>
+<p>在Collections中的copy函数就很好地诠释了PECS</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="keyword">static</span> &lt;T&gt; <span class="keyword">void</span> <span class="title function_">copy</span><span class="params">(List&lt;? <span class="built_in">super</span> T&gt; dest, List&lt;? extends T&gt; src)</span> &#123;</span><br><span class="line">    <span class="type">int</span> <span class="variable">srcSize</span> <span class="operator">=</span> src.size();</span><br><span class="line">    <span class="keyword">if</span> (srcSize &gt; dest.size())</span><br><span class="line">        <span class="keyword">throw</span> <span class="keyword">new</span> <span class="title class_">IndexOutOfBoundsException</span>(<span class="string">&quot;Source does not fit in dest&quot;</span>);</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (srcSize &lt; COPY_THRESHOLD ||</span><br><span class="line">        (src <span class="keyword">instanceof</span> RandomAccess &amp;&amp; dest <span class="keyword">instanceof</span> RandomAccess)) &#123;</span><br><span class="line">        <span class="keyword">for</span> (<span class="type">int</span> i=<span class="number">0</span>; i&lt;srcSize; i++)</span><br><span class="line">            dest.set(i, src.get(i));</span><br><span class="line">    &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">        ListIterator&lt;? <span class="built_in">super</span> T&gt; di=dest.listIterator();</span><br><span class="line">        ListIterator&lt;? <span class="keyword">extends</span> <span class="title class_">T</span>&gt; si=src.listIterator();</span><br><span class="line">        <span class="keyword">for</span> (<span class="type">int</span> i=<span class="number">0</span>; i&lt;srcSize; i++) &#123;</span><br><span class="line">            di.next();</span><br><span class="line">            di.set(si.next());</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>在这里，src使用extends进行协变，只可读取，dest使用super进行逆变，保证写入的类型检查。</p>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2022/03/22/java-aqs/" rel="prev" title="Java AQS原理以及应用">
+      <i class="fa fa-chevron-left"></i> Java AQS原理以及应用
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/2022/07/22/jvm-volatile/" rel="next" title="Java volatile关键字以及线程安全">
+      Java volatile关键字以及线程安全 <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          文章目录
+        </li>
+        <li class="sidebar-nav-overview">
+          站点概览
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#%E6%B3%9B%E5%9E%8B%E6%A6%82%E8%BF%B0"><span class="nav-number">1.</span> <span class="nav-text">泛型概述</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E6%B3%9B%E5%9E%8B%E6%93%A6%E9%99%A4"><span class="nav-number">2.</span> <span class="nav-text">泛型擦除</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%B3%9B%E5%9E%8B%E7%B1%BB%E7%9A%84%E7%BB%A7%E6%89%BF"><span class="nav-number">2.1.</span> <span class="nav-text">泛型类的继承</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E6%B3%9B%E5%9E%8B%E7%9A%84%E9%80%86%E5%8F%98%E5%92%8C%E5%8D%8F%E5%8F%98"><span class="nav-number">3.</span> <span class="nav-text">泛型的逆变和协变</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%B3%9B%E5%9E%8B%E7%9A%84%E4%B8%8D%E5%8F%98%E6%80%A7"><span class="nav-number">3.1.</span> <span class="nav-text">泛型的不变性</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%B3%9B%E5%9E%8B%E9%80%9A%E9%85%8D%E7%AC%A6"><span class="nav-number">3.1.1.</span> <span class="nav-text">泛型通配符</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#PECS"><span class="nav-number">4.</span> <span class="nav-text">PECS</span></a></li></ol></div>
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="xuanxu"
+      src="https://i.imgtg.com/2023/03/22/9GMCK.jpg">
+  <p class="site-author-name" itemprop="name">xuanxu</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">9</span>
+          <span class="site-state-item-name">日志</span>
+        </a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2023</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">xuanxu</span>
+</div>
+  <div class="powered-by">由 <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://pisces.theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Pisces</a> 强力驱动
+  </div>
+
+        
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+</body>
+</html>
