@@ -145,6 +145,152 @@
   
   
   <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2023/04/02/jit/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="https://i.imgtg.com/2023/03/22/9GMCK.jpg">
+      <meta itemprop="name" content="xuanxu">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Hexo">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          
+            <a href="/2023/04/02/jit/" class="post-title-link" itemprop="url">JIT编译器优化</a>
+        </h2>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">发表于</span>
+              
+
+              <time title="创建时间：2023-04-02 05:19:51 / 修改时间：17:42:59" itemprop="dateCreated datePublished" datetime="2023-04-02T05:19:51+08:00">2023-04-02</time>
+            </span>
+
+          
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+          <p>为了优化Java的性能 ，JVM在解释器之外引入了即时（Just In Time）编译器：当程序运行时，解释器首先发挥作用，代码可以直接执行。当程序运行时，JIT编译器再编译代码，获取更高的运行效率。</p>
+<p>这篇文章来记录下JIT编译器的工作过程以及一些优化的把戏。本文章中大部分的知识都是来自这个视频中的内容，我学习之后将他们记录下来。</p>
+<p><a target="_blank" rel="noopener" href="https://www.bilibili.com/video/BV14s4y1t7mu/?vd_source=f8140c020b01234facdbeb7d2d28b261">理解 JVM 中 JIT 玩的把戏_1_哔哩哔哩_bilibili</a></p>
+<h1 id="JIT分层编译"><a href="#JIT分层编译" class="headerlink" title="JIT分层编译"></a>JIT分层编译</h1><p>Java 8引入了分层编译的概念，分层编译将JVM的执行状态分为了五个层次。五个层级分别是：</p>
+<ol>
+<li><p>解释执行。</p>
+</li>
+<li><p>执行不带profiling的C1代码。</p>
+</li>
+<li><p>执行仅带方法调用次数以及循环回边执行次数profiling的C1代码。</p>
+</li>
+<li><p>执行带所有profiling的C1代码。</p>
+</li>
+<li><p>执行C2代码。</p>
+</li>
+</ol>
+<p>第一阶段就是解释执行，第二阶段是C1编译，C1拥有三个模式，也就是2,3,4，最后是C2编译。</p>
+<p>C1第一个模式，仅仅是编译执行，代码中没有任何埋点进行profiling的地方。</p>
+<p>C1第二个模式，是编译加上一个counter计数器，当计数器达到阈值将会到达C2。</p>
+<p>C1第三个模式，是编译加上所有的profiling，进行详细分析。比如某个分支，永远是true，或者某一个接口方法的调用，只使用过一种类型（比如List的add方法，实际上永远是ArrayList)，或者某个强制转换从未失败，某个调用从来没有产生过NEP异常。</p>
+<p>在一般情况下，代码从解释执行到C1，会直接到C1的第三个模式，最后达到C2。</p>
+<p>在C2忙的时候，也就是说C2拥有很多方法需要编译，队列中有很多待处理的任务时，代码会先达到C1的第二个模式，再达到C1的第三个模式，以此来减少C2的执行时间。在C1第三个模式下，如果profiling没有收集到有价值的数据，那么jvm会断定C2编译并没有比C1好很多。因此将会直接到C1的第一个模式。</p>
+<p>在C1忙的时候也有可能直接达到C2，在解释过程中进行profiling，然后直接由C2编译。</p>
+<h1 id="Uncommon-Trap"><a href="#Uncommon-Trap" class="headerlink" title="Uncommon Trap"></a>Uncommon Trap</h1><p>比如ArrayStream的forEach方法。</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">ArrayStream&lt;E&gt;.forEach(Consumer&lt;? <span class="built_in">super</span> E&gt; action) &#123;</span><br><span class="line">    <span class="keyword">for</span> (<span class="type">int</span> <span class="variable">i</span> <span class="operator">=</span> <span class="number">0</span>; i &lt; <span class="built_in">this</span>.elementData.length(), i++) &#123;</span><br><span class="line">        action.accept(<span class="built_in">this</span>.elementData[i]);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>首先，jvm为了保证代码的安全性，必须在代码中添加安全检查，因此，代码变成了下面这样。</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line">ArrayStream&lt;E&gt;.forEach(Consumer&lt;? <span class="built_in">super</span> E&gt; action) &#123;</span><br><span class="line">    <span class="keyword">if</span> (<span class="built_in">this</span> == <span class="literal">null</span>) <span class="keyword">throw</span> <span class="keyword">new</span> <span class="title class_">NPE</span>();</span><br><span class="line">    <span class="keyword">if</span> (<span class="built_in">this</span>.elementData == <span class="literal">null</span>) <span class="keyword">throw</span> <span class="keyword">new</span> <span class="title class_">NPE</span>();</span><br><span class="line">    <span class="keyword">for</span> (<span class="type">int</span> <span class="variable">i</span> <span class="operator">=</span> <span class="number">0</span>; i &lt; <span class="built_in">this</span>.elementData.length(), i++) &#123;</span><br><span class="line">        <span class="keyword">if</span> (<span class="built_in">this</span> == <span class="literal">null</span>) <span class="keyword">throw</span> <span class="keyword">new</span> <span class="title class_">NPE</span>();</span><br><span class="line">        <span class="keyword">if</span> (<span class="built_in">this</span>.elementData == <span class="literal">null</span>) <span class="keyword">throw</span> <span class="keyword">new</span> <span class="title class_">NPE</span>();</span><br><span class="line">        <span class="keyword">if</span> (i &lt; <span class="number">0</span>) <span class="keyword">throw</span> <span class="keyword">new</span> <span class="title class_">AIOBE</span>();</span><br><span class="line">        <span class="keyword">if</span> (i &gt;= <span class="built_in">this</span>.elementData.length) <span class="keyword">throw</span> <span class="keyword">new</span> <span class="title class_">AIOBE</span>();</span><br><span class="line">        <span class="keyword">if</span> (action == <span class="literal">null</span>) <span class="keyword">throw</span> <span class="keyword">new</span> <span class="title class_">NPE</span>();</span><br><span class="line">        action.accept(<span class="built_in">this</span>.elementData[i]);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>首先可以去掉的就是对this的检查，因为在对象的方法体中，this不可能为null。</p>
+<p>其次，由于i从0开始，并且this.elementData.length()不可能大于Integer.MAX，且i递增每次+1，所以，i不可能小于0。因此 i &lt; 0被去掉了。</p>
+<p>接着，对于 i &gt;= this.elementData.length，编译器将它优化为了 !(i &lt; this.elementData.length) ，这样，在上面的for循环中已经判断了一次 i &lt;this.elementData.length，在这个检查中只需要将上面计算的结果进行取反。也就是公共表达式消除。</p>
+<p>到这里，我们只剩下了，最开始的elementData == null的检查，循环中的elementData == null的检查，以及循环中的action == null的检查。</p>
+<p>这三个null检查是无法消除的，因此对于无法消除的null检查，我们就需要将检查的开销将到最低。</p>
+<p>因此，在编译时，检查elementData == null将会被直接消除，然后jvm会注册一个sig_fault handler，当出现了elementData为null的时候，jvm不会直接崩溃，而是会进入trap，通过操作系统调用段错误处理器，然后再抛出一个NPE异常。</p>
+<p>这样的优化比起直接新建一个分支来判断会快很多。前提是，这个elementData并不是null。类似于jvm断言这里肯定不会产生NPE异常，但是一旦产生null，就会陷入trap，然后去优化，整体就会变慢。</p>
+<h1 id="循环剥离"><a href="#循环剥离" class="headerlink" title="循环剥离"></a>循环剥离</h1><p>在上面的null判断中，除了使用trap，还有一种方法，也就是将第一次循环剥离出来。</p>
+<p>这时，代码变成了下面这样。</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><span class="line">ArrayStream.forEach(Consumer&lt;? <span class="built_in">super</span> E&gt; action) &#123;</span><br><span class="line">    <span class="keyword">if</span> (<span class="built_in">this</span>.elementData == <span class="literal">null</span>) &#123;</span><br><span class="line">        <span class="keyword">throw</span> <span class="keyword">new</span> <span class="title class_">NPE</span>();</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">if</span> (<span class="number">0</span> &lt; <span class="built_in">this</span>.elementData.length()) &#123;</span><br><span class="line">        <span class="keyword">if</span> (<span class="built_in">this</span>.elementData == <span class="literal">null</span>) &#123;</span><br><span class="line">            <span class="keyword">throw</span> <span class="keyword">new</span> <span class="title class_">NPE</span>();</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="keyword">if</span> (action == <span class="literal">null</span>) <span class="keyword">throw</span> <span class="keyword">new</span> <span class="title class_">NPE</span>();</span><br><span class="line">        action.accept(<span class="built_in">this</span>.elementData[<span class="number">0</span>]);</span><br><span class="line">    &#125;</span><br><span class="line">    </span><br><span class="line">    <span class="keyword">for</span> (<span class="type">int</span> <span class="variable">i</span> <span class="operator">=</span> <span class="number">1</span>; i &lt; <span class="built_in">this</span>.elementData.length(); i++) &#123;</span><br><span class="line">        <span class="keyword">if</span> (<span class="built_in">this</span>.elementData == <span class="literal">null</span>) <span class="keyword">throw</span> <span class="keyword">new</span> <span class="title class_">NPE</span>();</span><br><span class="line">        action.accept(<span class="built_in">this</span>.elementData[i]);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这样我们让action的null检查从n次变成了一次。</p>
+<h1 id="方法内联"><a href="#方法内联" class="headerlink" title="方法内联"></a>方法内联</h1><p>方法内联很简单，本质就是将被调用的方法的代码复制到调用者的方法体里，这样就消除了一次调用。</p>
+<p>比如遍历elementData，将每一个元素传入一个consume方法，该方法将传入的每一个数字加到sum上。</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">static</span> <span class="keyword">void</span> <span class="title function_">consume</span><span class="params">(<span class="type">int</span> x)</span> &#123;</span><br><span class="line">    sum += x;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>采用for循环的话有三种方式。</p>
+<p>第一种就是简单的获取this.elementData并遍历</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">for</span> (<span class="type">int</span> <span class="variable">i</span> <span class="operator">=</span> <span class="number">0</span>; i &lt; <span class="built_in">this</span>.elementData.length(); i++) &#123;</span><br><span class="line">    consume(<span class="built_in">this</span>.elementData[i]);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>第二种方法和第一种有一点不同，我们将this.elementData用一个局部变量保存起来。</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">E[] elementData = <span class="built_in">this</span>.elementData;</span><br><span class="line"><span class="keyword">for</span> (<span class="type">int</span> <span class="variable">i</span> <span class="operator">=</span> <span class="number">0</span>; i &lt; elementData.length(); i++) &#123;</span><br><span class="line">    consume(elementData[i]);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>第三种方式是使用Java的增强for循环</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">for</span> (<span class="type">int</span> i : <span class="built_in">this</span>.elementData) &#123;</span><br><span class="line">    consume(elementData[x]);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>在consume方法内联的情况下，三个函数的执行效率都差不多。</p>
+<p>但是，在不内联的情况下，第一种方式就比第二和第三种慢了许多。</p>
+<p>原因在于，第一种在每一次循环都需要重新加载elementData，因为elementData可能被修改。</p>
+<p>第二种方法使用了局部变量，因为局部变量是无法被修改的，所以不需要被重新加载。</p>
+<p>第三种方法其实和第二种本质上没有什么差别，增强for循环也会创建一个局部变量。</p>
+<p>但是对于虚函数，由于会有不同的实现类，那么又该如何内联呢。</p>
+<h1 id="去虚拟化"><a href="#去虚拟化" class="headerlink" title="去虚拟化"></a>去虚拟化</h1><p>在Java中，除了private函数以及final修饰的函数，几乎所有的对象函数都是虚函数。虚函数是实现多态的基础。</p>
+<p>每次调用虚函数，我们都要去找到对应的真实类型的函数，并进行调用。那么要怎么样才能去除虚函数的开销呢。</p>
+<p>首先是静态分析。</p>
+<p>假设有这样一个函数apply，接受一个Function参数，和一个int类型的参数，然后在函数内调用func.apply(x)</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">static</span> <span class="type">double</span> <span class="title function_">apply</span><span class="params">(Function func, <span class="type">int</span> x)</span> &#123;</span><br><span class="line">    func.apply(x);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>然后在main函数中调用apply</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="keyword">class</span> <span class="title class_">Monomorphic</span> &#123;</span><br><span class="line">    <span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">void</span> <span class="title function_">main</span><span class="params">(String[] args)</span> &#123;</span><br><span class="line">        <span class="type">Function</span> <span class="variable">func</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">Square</span>();</span><br><span class="line">        <span class="keyword">for</span> (<span class="type">int</span> <span class="variable">i</span> <span class="operator">=</span> <span class="number">0</span>; i &lt; <span class="number">20_000</span>; ++i) &#123;</span><br><span class="line">            apply(func, i);</span><br><span class="line">        &#125;    </span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>然后我们查看编译的日志</p>
+<p><img src="https://i.328888.xyz/2023/04/02/iHpJ23.jpeg" alt="iHpJ23.jpeg"></p>
+<p>就会发现，编译器将先将apply函数内联进了main函数，然后直接将Square的apply内联进了Monomorphic的apply函数。</p>
+<p>这里JIT使用了一个封闭世界的假设，它发现现在整个jvm中只有一个Function的实例，也就是Square，其他的实现了Function接口的类可能存在，但是现在还没有被加载。</p>
+<p>如果我们在这时加载了一个其他的类，比如Sqrt。这时实现了Function接口的类就不只有Square了，还存在Sqrt。这时，上面的假设就不成立了。</p>
+<p>因此这时，前面的编译将会失效，因为它直接内联了Square的apply函数。jvm将会立刻去优化。</p>
+<p>在这时，C2编译器将会被锁住，所有的线程将会返回到解释模式，性能将会大幅下降。</p>
+<p>这时，虚拟机将会开始收集调用的信息，被称为类型采样分析，这些信息由C1或者解释器收集。</p>
+<p>虚拟机将会收集每个Function的实现类被调用了几次，从哪里调用。</p>
+<p>假如在20000次Function.apply调用中，有19000次都是Square.apply，只有1000次是Sqrt.apply。这时JIT就可以基于这些信息开始编译。</p>
+<p>这次编译并不会像之前那样直接内联Square和Sqrt的apply函数。而是会加上类型检查。</p>
+<p>这时，代码将会在变成类似下方这样。</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> (func.getClass().equals(Square.class)) &#123;</span><br><span class="line">    <span class="comment">// 内联Square的apply函数</span></span><br><span class="line">&#125; <span class="keyword">else</span> <span class="keyword">if</span> (func.getClass().equals(Sqrt.class)) &#123;</span><br><span class="line">    <span class="comment">// 内联Sqrt的apply函数</span></span><br><span class="line">&#125; <span class="keyword">else</span> &#123;</span><br><span class="line">    uncommon_trap()</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>对于为什么不在else后面直接放虚函数调用，而还是加上一个uncommon trap。这时由于如果加上虚函数调用，那么在那个虚函数中又有可能会出现修改变量的行为，导致之前编译的代码出现问题。虚函数调用可以使用反射，反射可以修改几乎任何东西。</p>
+<h1 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h1><p>这里只写了JIT优化的很少一部分，还有很多其他的东西都没有写，比如GC是如何实现Stop The World的，GC如何与编译后的函数交互等等。</p>
+<p>从这里可以看出，Java很喜欢小方法和局部变量，很喜欢不变的东西，常量。Java也并不喜欢原生方法，因为Java虚拟机无法知晓native函数中具体做了什么，也无法优化，并且有可能导致崩溃。除非是intrinsic函数，也就是在jvm中有特殊实现的函数。</p>
+<p>因此，写Java代码应该保持函数尽可能的小，当函数字节码大小超过8000字节之后，JIT就不会对该函数进行优化。JIT将会将各个小函数内联起来并进行优化。不应该一直抛出异常，因为异常可能会导致编译优化失效。变量应该尽量使用局部变量，因为局部变量的不变性使得他们更容易被优化。</p>
+
+      
+    </div>
+
+    
+    
+    
+      <footer class="post-footer">
+        <div class="post-eof"></div>
+      </footer>
+  </article>
+  
+  
+  
+
+      
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
     <link itemprop="mainEntityOfPage" href="http://example.com/2023/03/30/fileMonitor/">
 
     <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
@@ -299,7 +445,7 @@
               <span class="post-meta-item-text">发表于</span>
               
 
-              <time title="创建时间：2023-03-18 11:41:00 / 修改时间：12:47:30" itemprop="dateCreated datePublished" datetime="2023-03-18T11:41:00+08:00">2023-03-18</time>
+              <time title="创建时间：2023-03-18 03:41:00 / 修改时间：12:47:30" itemprop="dateCreated datePublished" datetime="2023-03-18T03:41:00+08:00">2023-03-18</time>
             </span>
 
           
@@ -410,7 +556,7 @@
               </span>
               <span class="post-meta-item-text">发表于</span>
 
-              <time title="创建时间：2023-01-16 16:18:38" itemprop="dateCreated datePublished" datetime="2023-01-16T16:18:38+08:00">2023-01-16</time>
+              <time title="创建时间：2023-01-16 08:18:38" itemprop="dateCreated datePublished" datetime="2023-01-16T08:18:38+08:00">2023-01-16</time>
             </span>
               <span class="post-meta-item">
                 <span class="post-meta-item-icon">
@@ -819,7 +965,7 @@
                   <i class="far fa-calendar-check"></i>
                 </span>
                 <span class="post-meta-item-text">更新于</span>
-                <time title="修改时间：2023-03-28 13:49:05" itemprop="dateModified" datetime="2023-03-28T13:49:05+08:00">2023-03-28</time>
+                <time title="修改时间：2023-04-02 15:13:48" itemprop="dateModified" datetime="2023-04-02T15:13:48+08:00">2023-04-02</time>
               </span>
 
           
@@ -857,9 +1003,9 @@
 <figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="keyword">void</span> <span class="title function_">test</span><span class="params">(List)</span> &#123;&#125;</span><br></pre></td></tr></table></figure>
 
 <p>因此不能区分两个函数。</p>
-<h2 id="泛型类的继承"><a href="#泛型类的继承" class="headerlink" title="泛型类的继承"></a>泛型类的继承</h2><p>泛型类的继承关系不是由泛型类型决定的，如List<Integer>和List<Number>，虽然Integer继承自Number，但是List<Integer>和List<Number>并没有继承关系。</p>
+<h2 id="泛型类的继承"><a href="#泛型类的继承" class="headerlink" title="泛型类的继承"></a>泛型类的继承</h2><p>泛型类的继承关系不是由泛型类型决定的，如List&lt;Integer&gt;和List&lt;Number&gt;，虽然Integer继承自Number，但是List&lt;Integer&gt;和List&lt;Number&gt;并没有继承关系。</p>
 <p>要想使两个泛型类具有继承关系，只能使两个泛型类本身之间继承，或实现接口。</p>
-<p>如上面的ArrayList就继承了AbstractList<E>以及List<E>接口。</p>
+<p>如上面的ArrayList就继承了AbstractList&lt;E&lt;以及List&lt;E&lt;接口。</p>
 <h1 id="泛型的逆变和协变"><a href="#泛型的逆变和协变" class="headerlink" title="泛型的逆变和协变"></a>泛型的逆变和协变</h1><p>先从一个数组说起，Java的数组是协变的。</p>
 <p>看下面这段代码</p>
 <figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="keyword">class</span> <span class="title class_">Test</span> &#123;</span><br><span class="line">    <span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">void</span> <span class="title function_">main</span><span class="params">(String[] args)</span> &#123;</span><br><span class="line">        Number[] arr = <span class="keyword">new</span> <span class="title class_">Integer</span>[<span class="number">2</span>];</span><br><span class="line">        arr[<span class="number">0</span>] = <span class="number">1</span>;</span><br><span class="line">        arr[<span class="number">1</span>] = <span class="number">0.5</span>;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
@@ -869,27 +1015,27 @@
 
 <p>这是因为Integer是Number的子类型，因此Integer[]也是Number[]的子类型，这样的性质被称为协变，在编译器并没有检查出错误。</p>
 <p>但是在运行时，jvm虚拟机发现这个arr其实是一个Integer类型的数组，不是Number类型，所以不能存放进入double类型的数字，因此抛出了一个异常。</p>
-<h2 id="泛型的不变性"><a href="#泛型的不变性" class="headerlink" title="泛型的不变性"></a>泛型的不变性</h2><p>因此，在吸取了上面的教训之后，泛型被设计为不变，也就是说，List<Integer>并不是List<Number>的子类型。</p>
+<h2 id="泛型的不变性"><a href="#泛型的不变性" class="headerlink" title="泛型的不变性"></a>泛型的不变性</h2><p>因此，在吸取了上面的教训之后，泛型被设计为不变，也就是说，List&lt;Integer&gt;并不是List&lt;Number&gt;的子类型。</p>
 <p>这样在编译器就可以检查出错误，防止运行期再报错。</p>
 <p>但是这样就引入一个新的问题，如何才能实现协变呢。</p>
 <p>协变在Java中还是很常用的，比如我只想要一个Fruit集合，里面存放着水果，但我不想管里面到底存放的是哪种水果。</p>
 <figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="keyword">void</span> <span class="title function_">consume</span><span class="params">(List&lt;Fruit&gt; list)</span> &#123;</span><br><span class="line">    ......</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
 
-<p>这时，泛型的不变性就带来了麻烦，加入我现在有一个List<Apple>，因为List<Fruit>并不是List<Apple>的父类型，参数就传递不进去。</p>
+<p>这时，泛型的不变性就带来了麻烦，加入我现在有一个List&lt;Apple&gt;，因为List&lt;Fruit&gt;并不是List&lt;Apple&gt;的父类型，参数就传递不进去。</p>
 <figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">List&lt;Apple&gt; appleList = <span class="keyword">new</span> <span class="title class_">ArrayList</span>&lt;Apple&gt;;</span><br><span class="line">consume(appleList); <span class="comment">// 报错</span></span><br></pre></td></tr></table></figure>
 
 <p>因此，在泛型中如何实现协变就成为了一个问题。</p>
-<p>还有一种情况，如果我们希望往List<Object>中放水果，使用一个produce函数将所有List<Apple>或者List<Banana>的元素全部添加到List<Object>，但又希望在produce函数中向容器添加非Fruit的其他元素时进行检查并报错，这时候就需要逆变。</p>
+<p>还有一种情况，如果我们希望往List&lt;Object&gt;中放水果，使用一个produce函数将所有List&lt;Apple&gt;或者List&lt;Banana&gt;的元素全部添加到List&lt;Object&gt;，但又希望在produce函数中向容器添加非Fruit的其他元素时进行检查并报错，这时候就需要逆变。</p>
 <h3 id="泛型通配符"><a href="#泛型通配符" class="headerlink" title="泛型通配符"></a>泛型通配符</h3><p>要实现泛型协变和逆变，这时通配符 ? 就派上用场了。</p>
 <ul>
 <li><code>&lt;? extends&gt;</code>实现了泛型的协变</li>
 <li><code>&lt;? super&gt;</code>实现了泛型的逆变</li>
 </ul>
-<p>在上面的代码中，假如在consume函数中我们想传入参数，就需要把List<Fruit>改为List&lt;? extends Fruit&gt;。这样就不会产生报错了。</p>
-<p>List&lt;? extends Fruit&gt;，其中&lt;? extends Fruit&gt;代表的类型为：Fruit及其子类型，此时传入List<Apple>就没有问题了。</p>
-<p>但是当List<Apple>协变为List&lt;? extends Fruit&gt;之后，就不能往容器中再放入元素了。</p>
-<p>原因在于，当容器协变后，List&lt;? extends Fruit&gt;中的类型不能再被确定为Apple，&lt;? extends Fruit&gt;虽然包含Apple，但是并不特指为Apple。因此，如果放入一个其他的类型，比如Banana，那么在使用上一个List<Apple>进行读取的时候就会出现类型转换错误。</p>
-<p>同样的，如果希望往Fruit中放水果，就可以使用&lt;? super Fruit&gt;让List<Object>逆变为List&lt;? super Fruit&gt;，这样在函数中就可以调用add方法。</p>
+<p>在上面的代码中，假如在consume函数中我们想传入参数，就需要把List&lt;Fruit&gt;改为List&lt;? extends Fruit&gt;。这样就不会产生报错了。</p>
+<p>List&lt;? extends Fruit&gt;，其中&lt;? extends Fruit&gt;代表的类型为：Fruit及其子类型，此时传入List&lt;Apple&gt;就没有问题了。</p>
+<p>但是当List&lt;Apple&gt;协变为List&lt;? extends Fruit&gt;之后，就不能往容器中再放入元素了。</p>
+<p>原因在于，当容器协变后，List&lt;? extends Fruit&gt;中的类型不能再被确定为Apple，&lt;? extends Fruit&gt;虽然包含Apple，但是并不特指为Apple。因此，如果放入一个其他的类型，比如Banana，那么在使用上一个List&lt;Apple&gt;进行读取的时候就会出现类型转换错误。</p>
+<p>同样的，如果希望往Fruit中放水果，就可以使用&lt;? super Fruit&gt;让List&lt;Object&gt;逆变为List&lt;? super Fruit&gt;，这样在函数中就可以调用add方法。</p>
 <p>从上面的例子可以看出，<code>extends</code>确定了泛型的上界，而<code>super</code>确定了泛型的下界。</p>
 <h1 id="PECS"><a href="#PECS" class="headerlink" title="PECS"></a>PECS</h1><p>究竟什么时候使用extends，什么时候使用super。也就是PECS</p>
 <blockquote>
@@ -1042,7 +1188,7 @@
               </span>
               <span class="post-meta-item-text">发表于</span>
 
-              <time title="创建时间：2021-10-20 15:11:26" itemprop="dateCreated datePublished" datetime="2021-10-20T15:11:26+08:00">2021-10-20</time>
+              <time title="创建时间：2021-10-20 07:11:26" itemprop="dateCreated datePublished" datetime="2021-10-20T07:11:26+08:00">2021-10-20</time>
             </span>
               <span class="post-meta-item">
                 <span class="post-meta-item-icon">
@@ -1239,7 +1385,7 @@
       <div class="site-state-item site-state-posts">
           <a href="/archives/">
         
-          <span class="site-state-item-count">8</span>
+          <span class="site-state-item-count">9</span>
           <span class="site-state-item-name">日志</span>
         </a>
       </div>
